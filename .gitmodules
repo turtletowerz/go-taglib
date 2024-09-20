@@ -1,0 +1,3 @@
+[submodule "embed/taglib"]
+	path = embed/taglib
+	url = https://github.com/sentriz/taglib
