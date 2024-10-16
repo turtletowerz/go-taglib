@@ -8,8 +8,8 @@ import (
 )
 
 //go:embed tag_c.wasm
-var Binary []byte
+var binary []byte
 
 func init() {
-	taglib.LoadBinary(context.Background(), Binary)
+	taglib.LoadBinary(context.Background(), binary)
 }
