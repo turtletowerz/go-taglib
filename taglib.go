@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"iter"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -23,6 +24,11 @@ type File struct {
 }
 
 func New(path string) (File, error) {
+	var err error
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return File{}, fmt.Errorf("make path abs %w", err)
+	}
 	f := taglibFileNew(path)
 	if !taglibFileValid(f) {
 		return File{}, ErrInvalidFile
@@ -83,6 +89,15 @@ func (f File) SetTag(key string, vs ...string) {
 	}
 }
 
+func (f File) IterTagKeys() iter.Seq[string] {
+	return func(yield func(string) bool) {
+		for _, k := range taglibPropertyKeys(f.ptr) {
+			if !yield(k) {
+				break
+			}
+		}
+	}
+}
 func (f File) IterTags() iter.Seq2[string, []string] {
 	return func(yield func(string, []string) bool) {
 		for _, k := range taglibPropertyKeys(f.ptr) {
