@@ -5,20 +5,27 @@
 #include "fileref.h"
 
 extern "C" {
+__attribute__((export_name("malloc"))) void* exported_malloc(size_t size) {
+    return malloc(size);
+}
+
+__attribute__((export_name("free"))) void exported_free(void* ptr) {
+    free(ptr);
+}
 
 typedef struct {
   int dummy;
 } TagLib_File;
 
-TagLib_File *taglib_file_new(const char *filename) {
+__attribute__((export_name("taglib_file_new"))) TagLib_File *taglib_file_new(const char *filename) {
   return reinterpret_cast<TagLib_File *>(new TagLib::FileRef(filename));
 }
 
-bool taglib_file_is_valid(const TagLib_File *file) {
+__attribute__((export_name("taglib_file_is_valid"))) bool taglib_file_is_valid(const TagLib_File *file) {
   return !reinterpret_cast<const TagLib::FileRef *>(file)->isNull();
 }
 
-char **taglib_file_tags(const TagLib_File *file) {
+__attribute__((export_name("taglib_file_tags"))) char **taglib_file_tags(const TagLib_File *file) {
   auto f = reinterpret_cast<const TagLib::FileRef *>(file);
   auto properties = f->properties();
 
@@ -45,7 +52,7 @@ char **taglib_file_tags(const TagLib_File *file) {
   return tags;
 }
 
-void taglib_file_write_tags(TagLib_File *file, const char **tags) {
+__attribute__((export_name("taglib_file_write_tags"))) void taglib_file_write_tags(TagLib_File *file, const char **tags) {
   auto f = reinterpret_cast<TagLib::FileRef *>(file);
 
   TagLib::PropertyMap properties;
@@ -61,7 +68,7 @@ void taglib_file_write_tags(TagLib_File *file, const char **tags) {
   f->setProperties(properties);
 }
 
-int *taglib_file_audioproperties(const TagLib_File *file) {
+__attribute__((export_name("taglib_file_audioproperties"))) int *taglib_file_audioproperties(const TagLib_File *file) {
   auto f = reinterpret_cast<const TagLib::FileRef *>(file);
 
   int *arr = (int *)malloc(4 * sizeof(int));
@@ -75,11 +82,11 @@ int *taglib_file_audioproperties(const TagLib_File *file) {
   return arr;
 }
 
-bool taglib_file_save(TagLib_File *file) {
+__attribute__((export_name("taglib_file_save"))) bool taglib_file_save(TagLib_File *file) {
   return reinterpret_cast<TagLib::FileRef *>(file)->save();
 }
 
-void taglib_file_free(TagLib_File *file) {
+__attribute__((export_name("taglib_file_free"))) void taglib_file_free(TagLib_File *file) {
   delete reinterpret_cast<TagLib::FileRef *>(file);
 }
 }
