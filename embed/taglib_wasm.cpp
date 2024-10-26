@@ -1,40 +1,29 @@
 #include <cstring>
 #include <iostream>
 
-#include "tpropertymap.h"
 #include "fileref.h"
+#include "tpropertymap.h"
 
-extern "C" {
-__attribute__((export_name("malloc"))) void* exported_malloc(size_t size) {
-    return malloc(size);
+__attribute__((export_name("malloc"))) void *exported_malloc(size_t size) {
+  return malloc(size);
 }
 
-__attribute__((export_name("free"))) void exported_free(void* ptr) {
-    free(ptr);
-}
+__attribute__((export_name("taglib_file_tags"))) char **
+taglib_file_tags(const char *filename) {
+  TagLib::FileRef file(filename);
+  if (file.isNull())
+    return nullptr;
 
-typedef struct {
-  int dummy;
-} TagLib_File;
-
-__attribute__((export_name("taglib_file_new"))) TagLib_File *taglib_file_new(const char *filename) {
-  return reinterpret_cast<TagLib_File *>(new TagLib::FileRef(filename));
-}
-
-__attribute__((export_name("taglib_file_is_valid"))) bool taglib_file_is_valid(const TagLib_File *file) {
-  return !reinterpret_cast<const TagLib::FileRef *>(file)->isNull();
-}
-
-__attribute__((export_name("taglib_file_tags"))) char **taglib_file_tags(const TagLib_File *file) {
-  auto f = reinterpret_cast<const TagLib::FileRef *>(file);
-  auto properties = f->properties();
+  auto properties = file.properties();
 
   size_t len = 0;
   for (const auto &kvs : properties)
-    for (const auto &v : kvs.second)
-      len++;
+    len += kvs.second.size();
 
-  char **tags = new char *[len + 1];
+  char **tags = static_cast<char **>(malloc(sizeof(char *) * (len + 1)));
+  if (!tags)
+    return nullptr;
+
   size_t i = 0;
   for (const auto &kvs : properties)
     for (const auto &v : kvs.second) {
@@ -42,38 +31,48 @@ __attribute__((export_name("taglib_file_tags"))) char **taglib_file_tags(const T
       row.append(kvs.first);
       row.append("\t");
       row.append(v);
-      tags[i] = new char[row.size() + 1];
+      tags[i] = static_cast<char *>(malloc(row.size() + 1));
       strncpy(tags[i], row.toCString(), row.size());
       tags[i][row.size()] = '\0';
       i++;
     }
+  tags[len] = nullptr;
 
-  tags[len] = NULL;
   return tags;
 }
 
-__attribute__((export_name("taglib_file_write_tags"))) void taglib_file_write_tags(TagLib_File *file, const char **tags) {
-  auto f = reinterpret_cast<TagLib::FileRef *>(file);
+__attribute__((export_name("taglib_file_write_tags"))) bool
+taglib_file_write_tags(const char *filename, const char **tags) {
+  if (!filename || !tags)
+    return false;
+
+  TagLib::FileRef file(filename);
+  if (file.isNull())
+    return false;
 
   TagLib::PropertyMap properties;
   for (size_t i = 0; tags[i] != NULL; i++) {
     TagLib::String row = tags[i];
     if (auto ti = row.find("\t"); ti >= 0) {
-      TagLib::String key = row.substr(0, ti);
-      TagLib::String value = row.substr(ti + 1);
+      TagLib::String key(row.substr(0, ti));
+      TagLib::StringList value(row.substr(ti + 1));
       properties.insert(key, value);
     }
   }
 
-  f->setProperties(properties);
+  if (auto rejected = file.setProperties(properties); rejected.size() > 0)
+    return 0;
+
+  return file.save();
 }
 
-__attribute__((export_name("taglib_file_audioproperties"))) int *taglib_file_audioproperties(const TagLib_File *file) {
-  auto f = reinterpret_cast<const TagLib::FileRef *>(file);
+__attribute__((export_name("taglib_file_audioproperties"))) int *
+taglib_file_audioproperties(const char *filename) {
+  TagLib::FileRef file(filename);
 
-  int *arr = (int *)malloc(4 * sizeof(int));
+  int *arr = static_cast<int *>(malloc(4 * sizeof(int)));
 
-  auto audioProperties = f->audioProperties();
+  auto audioProperties = file.audioProperties();
   arr[0] = audioProperties->lengthInMilliseconds();
   arr[1] = audioProperties->channels();
   arr[2] = audioProperties->sampleRate();
@@ -81,14 +80,3 @@ __attribute__((export_name("taglib_file_audioproperties"))) int *taglib_file_aud
 
   return arr;
 }
-
-__attribute__((export_name("taglib_file_save"))) bool taglib_file_save(TagLib_File *file) {
-  return reinterpret_cast<TagLib::FileRef *>(file)->save();
-}
-
-__attribute__((export_name("taglib_file_free"))) void taglib_file_free(TagLib_File *file) {
-  delete reinterpret_cast<TagLib::FileRef *>(file);
-}
-}
-
-int main() { return 0; }

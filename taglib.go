@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/tetratelabs/wazero"
@@ -18,321 +17,288 @@ import (
 var ErrInvalidFile = fmt.Errorf("invalid file")
 var ErrSavingFile = fmt.Errorf("can't save file")
 
-type File struct {
-	ptr        uint32
-	properties func() []int
-}
-
-func New(path string) (File, error) {
+func ReadTags(path string) (map[string][]string, error) {
 	var err error
 	path, err = filepath.Abs(path)
 	if err != nil {
-		return File{}, fmt.Errorf("make path abs %w", err)
+		return nil, fmt.Errorf("make path abs %w", err)
 	}
-	f := taglibFileNew(path)
-	if !taglibFileValid(f) {
-		return File{}, ErrInvalidFile
-	}
-	return File{
-		ptr: f,
-		properties: sync.OnceValue(func() []int {
-			return taglibFileAudioProperties(f)
-		}),
-	}, nil
-}
 
-func (f File) ReadTags() map[string][]string {
-	var m = map[string][]string{}
-	for _, row := range taglibFileTags(f.ptr) {
+	mod := newModule()
+	defer mod.close()
+
+	var raw []string
+	mod.call("taglib_file_tags", &raw, path)
+	if raw == nil {
+		return nil, ErrInvalidFile
+	}
+
+	var tags = map[string][]string{}
+	for _, row := range raw {
 		k, v, ok := strings.Cut(row, "\t")
 		if !ok {
 			continue
 		}
-		m[k] = append(m[k], v)
+		tags[k] = append(tags[k], v)
 	}
-	return m
+	return tags, nil
 }
 
-func (f File) WriteTags(m map[string][]string) {
-	var s []string
-	for k, vs := range m {
+type Properties struct {
+	Length     time.Duration
+	Channels   uint
+	SampleRate uint
+	Bitrate    uint
+}
+
+func ReadProperties(path string) (Properties, error) {
+	var err error
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return Properties{}, fmt.Errorf("make path abs %w", err)
+	}
+
+	mod := newModule()
+	defer mod.close()
+
+	const (
+		audioPropertyLengthInMilliseconds = iota
+		audioPropertyChannels
+		audioPropertySampleRate
+		audioPropertyBitrate
+		audioPropertyLen
+	)
+
+	raw := make([]int, 0, audioPropertyLen)
+	mod.call("taglib_file_audioproperties", &raw, path)
+
+	return Properties{
+		Length:     time.Duration(raw[audioPropertyLengthInMilliseconds]) * time.Millisecond,
+		Channels:   uint(raw[audioPropertyChannels]),
+		SampleRate: uint(raw[audioPropertySampleRate]),
+		Bitrate:    uint(raw[audioPropertyBitrate]),
+	}, nil
+}
+
+func WriteTags(path string, tags map[string][]string) error {
+	var err error
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("make path abs %w", err)
+	}
+
+	mod := newModule()
+	defer mod.close()
+
+	var raw []string
+	for k, vs := range tags {
 		for _, v := range vs {
-			s = append(s, k+"\t"+v)
+			raw = append(raw, k+"\t"+v)
 		}
 	}
-	taglibFileWriteTags(f.ptr, s)
-}
 
-func (f File) Length() time.Duration {
-	return time.Duration(f.properties()[audioPropertyLengthInMilliseconds]) * time.Millisecond
-}
-func (f File) Bitrate() int {
-	return f.properties()[audioPropertyBitrate]
-}
-func (f File) SampleRate() int {
-	return f.properties()[audioPropertySampleRate]
-}
-func (f File) Channels() int {
-	return f.properties()[audioPropertyChannels]
-}
-
-func (f File) Save() error {
-	if !taglibFileSave(f.ptr) {
+	var out bool
+	mod.call("taglib_file_write_tags", &out, path, raw)
+	if !out {
 		return ErrSavingFile
 	}
 	return nil
 }
 
-func (f File) Close() {
-	taglibFileFree(f.ptr)
+type module struct {
+	mod api.Module
 }
 
-var stk stack
+func newModule() module {
+	if compiled == nil {
+		panic("WASM binary not set. please set with `import _ \"go.senan.xyz/taglib-wasm/embed\"`")
+	}
 
-func taglibFileNew(filename string) uint32 {
-	defer stk.reset()()
-	stk.string(filename)
-	call(&stk, "taglib_file_new")
-	return stk.getPtr()
+	cfg := wazero.
+		NewModuleConfig().
+		WithStdout(os.Stdout).
+		WithStderr(os.Stderr).
+		WithName("").
+		WithFSConfig(wazero.NewFSConfig().WithDirMount("/", "/"))
+
+	ctx := context.Background()
+	mod, err := runtime.InstantiateModule(ctx, compiled, cfg)
+	if err != nil {
+		panic(err)
+	}
+
+	if _, err := mod.ExportedFunction("_initialize").Call(ctx); err != nil {
+		panic(err)
+	}
+	return module{
+		mod: mod,
+	}
 }
 
-func taglibFileValid(file uint32) bool {
-	defer stk.reset()()
-	stk.int(file)
-	call(&stk, "taglib_file_is_valid")
-	return stk.getBool()
+func (m *module) malloc(size uint32) uint32 {
+	var ptr uint32
+	m.call("malloc", &ptr, size)
+	if ptr == 0 {
+		panic("no ptr")
+	}
+	return ptr
 }
 
-func taglibFileTags(file uint32) []string {
-	defer stk.reset()()
-	stk.int(file)
-	call(&stk, "taglib_file_tags")
-	return stk.getStrings()
+func (m *module) call(name string, dest any, args ...any) {
+	params := make([]uint64, 0, len(args))
+	for _, a := range args {
+		switch a := a.(type) {
+		case int:
+			params = append(params, uint64(a))
+		case uint32:
+			params = append(params, uint64(a))
+		case uint64:
+			params = append(params, a)
+		case string:
+			params = append(params, uint64(makeString(m, a)))
+		case []string:
+			params = append(params, uint64(makeStrings(m, a)))
+		default:
+			panic(fmt.Sprintf("unknown argument type %T", a))
+		}
+	}
+
+	results, err := m.mod.ExportedFunction(name).Call(context.Background(), params...)
+	if err != nil {
+		panic(err)
+	}
+	if len(results) == 0 {
+		return
+	}
+	result := results[0]
+
+	switch dest := dest.(type) {
+	case *int:
+		*dest = int(result)
+	case *uint32:
+		*dest = uint32(result)
+	case *uint64:
+		*dest = uint64(result)
+	case *bool:
+		*dest = result == 1
+	case *string:
+		if result != 0 {
+			*dest = readString(m, uint32(result))
+		}
+	case *[]string:
+		if result != 0 {
+			*dest = readStrings(m, uint32(result))
+		}
+	case *[]int:
+		if result != 0 {
+			*dest = readInts(m, uint32(result), cap(*dest))
+		}
+	default:
+		panic(fmt.Sprintf("unknown result type %T", dest))
+	}
 }
 
-func taglibFileWriteTags(file uint32, tags []string) {
-	defer stk.reset()()
-	stk.int(file)
-	stk.strings(tags)
-	call(&stk, "taglib_file_write_tags")
-}
-
-const (
-	audioPropertyLengthInMilliseconds = iota
-	audioPropertyChannels
-	audioPropertySampleRate
-	audioPropertyBitrate
-	audioPropertyLen
-)
-
-func taglibFileAudioProperties(file uint32) []int {
-	defer stk.reset()()
-	stk.int(file)
-	call(&stk, "taglib_file_audioproperties")
-	return stk.getInts(audioPropertyLen)
-}
-
-func taglibFileFree(file uint32) {
-	defer stk.reset()()
-	stk.int(file)
-	call(&stk, "taglib_file_free")
-}
-
-func taglibFileSave(file uint32) bool {
-	defer stk.reset()()
-	stk.int(file)
-	call(&stk, "taglib_file_save")
-	return stk.getBool()
-}
-
-var mstk stack
-
-func malloc(size uint64) uint32 {
-	defer mstk.reset()()
-	mstk.int(uint32(size))
-	call(&mstk, "malloc")
-	return mstk.getPtr()
-}
-
-func free(ptr uint32) {
-	defer mstk.reset()()
-	mstk.int(ptr)
-	call(&mstk, "free")
-}
-
-func call(stk *stack, name string) {
-	if err := module.ExportedFunction(name).CallWithStack(context.Background(), stk.stack); err != nil {
+func (m *module) close() {
+	if err := m.mod.Close(context.Background()); err != nil {
 		panic(err)
 	}
 }
 
-type stack struct {
-	stack []uint64
-	ptrs  []uint64
-	mu    sync.Mutex
-}
+var runtime wazero.Runtime
+var compiled wazero.CompiledModule
 
-func (stk *stack) reset() (cleanup func()) {
-	stk.mu.Lock()
+func LoadBinary(ctx context.Context, bin []byte) {
+	runtime = wazero.NewRuntime(ctx)
+	wasi_snapshot_preview1.MustInstantiate(ctx, runtime)
 
-	if stk.stack == nil {
-		stk.stack = make([]uint64, 0, 8)
-		stk.ptrs = make([]uint64, 0, 8)
+	_, err := runtime.
+		NewHostModuleBuilder("env").
+		NewFunctionBuilder().WithFunc(func(int32) int32 { panic("__cxa_allocate_exception") }).Export("__cxa_allocate_exception").
+		NewFunctionBuilder().WithFunc(func(int32, int32, int32) { panic("__cxa_throw") }).Export("__cxa_throw").Instantiate(ctx)
+	if err != nil {
+		panic(err)
 	}
-	stk.stack = stk.stack[:0]
-	stk.ptrs = stk.ptrs[:0]
 
-	return func() {
-		for _, ptr := range stk.ptrs {
-			free(uint32(ptr))
-		}
-
-		stk.mu.Unlock()
+	compiled, err = runtime.CompileModule(ctx, bin)
+	if err != nil {
+		panic(err)
 	}
 }
 
-func (stk *stack) int(i uint32) {
-	stk.stack = append(stk.stack, uint64(i))
-}
-
-func (stk *stack) string(s string) {
+func makeString(m *module, s string) uint32 {
 	b := append([]byte(s), 0)
-
-	ptr := malloc(uint64(len(b)))
-	if !module.Memory().Write(ptr, b) {
-		panic("failed to write to memory")
+	ptr := m.malloc(uint32(len(b)))
+	if !m.mod.Memory().Write(ptr, b) {
+		panic("failed to write to mod.module.Memory()")
 	}
-
-	stk.stack = append(stk.stack, uint64(ptr))
-	stk.ptrs = append(stk.ptrs, uint64(ptr))
+	return ptr
 }
 
-func (stk *stack) strings(ss []string) {
-	arrayPtr := malloc(uint64((len(ss) + 1) * 4))
-
-	for i, s := range ss {
+func makeStrings(m *module, s []string) uint32 {
+	arrayPtr := m.malloc(uint32((len(s) + 1) * 4))
+	for i, s := range s {
 		b := append([]byte(s), 0)
-
-		ptr := malloc(uint64(len(b)))
-		if !module.Memory().Write(ptr, b) {
-			panic("failed to write to memory")
+		ptr := m.malloc(uint32(len(b)))
+		if !m.mod.Memory().Write(ptr, b) {
+			panic("failed to write to mod.module.Memory()")
 		}
-		if !module.Memory().WriteUint32Le(arrayPtr+uint32(i*4), ptr) {
-			panic("failed to write pointer to memory")
+		if !m.mod.Memory().WriteUint32Le(arrayPtr+uint32(i*4), ptr) {
+			panic("failed to write pointer to mod.module.Memory()")
 		}
-
-		stk.ptrs = append(stk.ptrs, uint64(ptr))
 	}
-
-	if !module.Memory().WriteUint32Le(arrayPtr+uint32(len(ss)*4), 0) {
+	if !m.mod.Memory().WriteUint32Le(arrayPtr+uint32(len(s)*4), 0) {
 		panic("failed to write pointer to memory")
 	}
-
-	stk.stack = append(stk.stack, uint64(arrayPtr))
-	stk.ptrs = append(stk.ptrs, uint64(arrayPtr))
+	return arrayPtr
 }
 
-func (stk *stack) getPtr() uint32        { return uint32(stk.stack[0]) }
-func (stk *stack) getInt() int           { return int(stk.stack[0]) }
-func (stk *stack) getInts(len int) []int { return readInts(uint32(stk.stack[0]), len) }
-func (stk *stack) getBool() bool         { return stk.stack[0] == 1 }
-func (stk *stack) getString() string     { return readString(uint32(stk.stack[0])) }
-func (stk *stack) getStrings() []string  { return readStrings(uint32(stk.stack[0])) }
-
-// readString reads a null terminated string at ptr
-func readString(ptr uint32) string {
-	defer func() {
-		free(ptr)
-	}()
-
-	size := uint32(256)
-	buf, ok := module.Memory().Read(ptr, size)
+func readString(m *module, ptr uint32) string {
+	size := uint32(64)
+	buf, ok := m.mod.Memory().Read(ptr, size)
 	if !ok {
 		panic("memory error")
 	}
 	if i := bytes.IndexByte(buf, 0); i >= 0 {
 		return string(buf[:i])
 	}
-
 	for {
-		next, ok := module.Memory().Read(ptr+size, size)
+		next, ok := m.mod.Memory().Read(ptr+size, size)
 		if !ok {
 			panic("memory error")
 		}
 		if i := bytes.IndexByte(next, 0); i >= 0 {
 			return string(append(buf, next[:i]...))
 		}
-
 		buf = append(buf, next...)
 		size += size
 	}
 }
 
-// readString reads a null terminated string array at ptr
-func readStrings(ptr uint32) []string {
-	defer func() {
-		free(ptr)
-	}()
-
-	var strs []string
+func readStrings(m *module, ptr uint32) []string {
+	strs := []string{} // non nil so call knows if it's just empty
 	for {
-		stringPtr, ok := module.Memory().ReadUint32Le(ptr)
+		stringPtr, ok := m.mod.Memory().ReadUint32Le(ptr)
 		if !ok {
 			panic("memory error")
 		}
 		if stringPtr == 0 {
 			break
 		}
-		str := readString(stringPtr)
+		str := readString(m, stringPtr)
 		strs = append(strs, str)
 		ptr += 4
 	}
 	return strs
 }
 
-// readInts reads an slice of ints of size len starting at ptr
-func readInts(ptr uint32, len int) []int {
-	defer func() {
-		free(ptr)
-	}()
-
+func readInts(m *module, ptr uint32, len int) []int {
 	ints := make([]int, 0, len)
 	for i := range len {
-		i, ok := module.Memory().ReadUint32Le(ptr + uint32(4*i))
+		i, ok := m.mod.Memory().ReadUint32Le(ptr + uint32(4*i))
 		if !ok {
 			panic("memory error")
 		}
 		ints = append(ints, int(i))
 	}
 	return ints
-}
-
-var module api.Module
-
-func LoadBinary(ctx context.Context, bin []byte) {
-	runtime := wazero.NewRuntime(ctx)
-	wasi_snapshot_preview1.MustInstantiate(ctx, runtime)
-
-	hostmod := runtime.NewHostModuleBuilder("env")
-	hostmod = hostmod.NewFunctionBuilder().WithFunc(func(int32) int32 { panic("__cxa_allocate_exception") }).Export("__cxa_allocate_exception")
-	hostmod = hostmod.NewFunctionBuilder().WithFunc(func(int32, int32, int32) { panic("__cxa_throw") }).Export("__cxa_throw")
-	if _, err := hostmod.Instantiate(ctx); err != nil {
-		panic(err)
-	}
-
-	guest, err := runtime.CompileModule(ctx, bin)
-	if err != nil {
-		panic(err)
-	}
-
-	config := wazero.
-		NewModuleConfig().
-		WithStdout(os.Stdout).
-		WithStderr(os.Stderr).
-		WithFSConfig(wazero.NewFSConfig().WithDirMount("/", "/"))
-
-	module, err = runtime.InstantiateModule(ctx, guest, config)
-	if err != nil {
-		panic(err)
-	}
 }
