@@ -290,7 +290,7 @@ func readStrings(ptr uint32) []string {
 	return strs
 }
 
-// readInts reads a null terminated int array at ptr
+// readInts reads an slice of ints of size len starting at ptr
 func readInts(ptr uint32, len int) []int {
 	defer func() {
 		free(ptr)
