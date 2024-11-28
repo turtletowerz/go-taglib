@@ -49,25 +49,25 @@ fmt.Printf("Length: %v, Bitrate: %d, SampleRate: %d, Channels: %d\n", properties
 
 The binary is already included in the package. However if you want to manually build and override it, you can with WASI SDK and Go build flags
 
-1. Install [WASI SDK](https://github.com/WebAssembly/wasi-sdk) globally
-2. Clone this repository
-3. Initialize submodules (TagLib, utf8cpp, etc):
+1. Install [WASI SDK](https://github.com/WebAssembly/wasi-sdk) globally. The default installation path is `/opt/wasi-sdk/`
+2. Clone this repository and Git submodules
 
-   ```bash
-   git submodule update --init --recursive
+   ```console
+   $ git clone "https://github.com/sentriz/go-taglib-wasm.git" --recursive
+   $ cd go-taglib-wasm
    ```
 
-4. Generate the WASM binary:
+3. Generate the WASM binary:
 
-   ```bash
-   go generate ./...
-   # taglib.wasm created
+   ```console
+   $ go generate ./...
+   $ # taglib.wasm created
    ```
 
-5. Use the new binary in your project
+4. Use the new binary in your project
 
-   ```bash
-   GCO_ENABLED=0 go build -ldflags="-X 'go.senan.xyz/taglib-wasm.BinaryPath=/path/to/taglib.wasm'" ./your/project/...
+   ```console
+   $ GCO_ENABLED=0 go build -ldflags="-X 'go.senan.xyz/taglib-wasm.BinaryPath=/path/to/taglib.wasm'" ./your/project/...
    ```
 
 ### Performance
