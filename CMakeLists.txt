@@ -9,7 +9,7 @@ include_directories(
   taglib/taglib/toolkit
 )
 
-add_executable(taglib taglib_wasm.cpp)
+add_executable(taglib taglib.cpp)
 set_target_properties(taglib PROPERTIES SUFFIX ".wasm")
 target_compile_options(taglib PRIVATE --target=wasm32-wasi -g0 -O2)
 target_link_options(taglib PRIVATE -Wl,--allow-undefined -mexec-model=reactor)

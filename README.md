@@ -14,18 +14,11 @@ This project is a Go library for reading and writing audio metadata tags. It pro
 
 ### Usage
 
-To use the library in your Go project, import it along with the embedded binary:
-
-```go
-import (
-    "go.senan.xyz/taglib-wasm"
-    _ "go.senan.xyz/taglib-wasm/embed"
-)
-```
-
 ### Reading Tags
 
 ```go
+import "go.senan.xyz/taglib-wasm"
+
 tags, err := taglib.ReadTags("path/to/audiofile.mp3")
 // check(err)
 fmt.Println(tags)
@@ -34,6 +27,8 @@ fmt.Println(tags)
 ### Writing Tags
 
 ```go
+import "go.senan.xyz/taglib-wasm"
+
 err := taglib.WriteTags("path/to/audiofile.mp3", map[string][]string{
     "ALBUMARTISTS":        {"David Bynre", "Brian Eno"},
     "ALBUMARTISTS_CREDIT": {"Brian Eno & David Bynre"},
@@ -45,26 +40,36 @@ err := taglib.WriteTags("path/to/audiofile.mp3", map[string][]string{
 ### Reading Audio Properties
 
 ```go
+import "go.senan.xyz/taglib-wasm"
+
 properties, err := taglib.ReadProperties("path/to/audiofile.mp3")
 // check(err)
 fmt.Printf("Length: %v, Bitrate: %d, SampleRate: %d, Channels: %d\n", properties.Length, properties.Bitrate, properties.SampleRate, properties.Channels)
 ```
 
-## Manually Building the WASM Binary
+## Manually Building and Using the WASM Binary
 
-While the binary is already included in the [embed](https://pkg.go.dev/go.senan.xyz/taglib-wasm/embed) package, those who want to built it themselves can with WASI SDK.
+The binary is already included in the package. However if you want to manually build and override it, you can with WASI SDK and Go build flags
 
-1. Install [WASI SDK](https://github.com/WebAssembly/wasi-sdk).
-2. Initialize submodules (TagLib, utf8cpp, etc):
+1. Install [WASI SDK](https://github.com/WebAssembly/wasi-sdk) globally
+2. Clone this repository
+3. Initialize submodules (TagLib, utf8cpp, etc):
 
    ```bash
    git submodule update --init --recursive
    ```
 
-3. Generate the WASM binary:
+4. Generate the WASM binary:
 
    ```bash
-   go generate ./embed/...
+   go generate ./...
+   # taglib.wasm created
+   ```
+
+5. Use the new binary in your project
+
+   ```bash
+   GCO_ENABLED=0 go build -ldflags="-X 'go.senan.xyz/taglib-wasm.Binary=/path/to/taglib.wasm'" ./your/project/...
    ```
 
 ### Performance

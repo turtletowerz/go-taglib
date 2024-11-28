@@ -3,15 +3,26 @@ package taglib
 import (
 	"bytes"
 	"context"
+	_ "embed"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
+
+//go:generate cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DWITH_ZLIB=OFF -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF -DWASI_SDK_PREFIX=/opt/wasi-sdk -DCMAKE_TOOLCHAIN_FILE=/opt/wasi-sdk/share/cmake/wasi-sdk.cmake -B build .
+//go:generate cmake --build build --target taglib
+//go:generate mv build/taglib.wasm .
+//go:generate wasm-opt --strip -c -O3 taglib.wasm -o taglib.wasm
+
+//go:embed taglib.wasm
+var Binary string // WASM blob, can also be a filesystem path. To override, go build -ldflags="-X 'go.senan.xyz/taglib-wasm.Binary=/path/to/taglib.wasm'"
 
 var ErrNoBinary = fmt.Errorf("WASM binary not set")
 var ErrInvalidFile = fmt.Errorf("invalid file")
@@ -121,11 +132,51 @@ type module struct {
 	mod api.Module
 }
 
+type rc struct {
+	wazero.Runtime
+	wazero.CompiledModule
+}
+
+var getRuntimeOnce = sync.OnceValues(func() (rc, error) {
+	ctx := context.Background()
+
+	runtime := wazero.NewRuntime(ctx)
+	wasi_snapshot_preview1.MustInstantiate(ctx, runtime)
+
+	_, err := runtime.
+		NewHostModuleBuilder("env").
+		NewFunctionBuilder().WithFunc(func(int32) int32 { panic("__cxa_allocate_exception") }).Export("__cxa_allocate_exception").
+		NewFunctionBuilder().WithFunc(func(int32, int32, int32) { panic("__cxa_throw") }).Export("__cxa_throw").
+		Instantiate(ctx)
+	if err != nil {
+		return rc{}, err
+	}
+
+	var binary = []byte(Binary)
+	if len(Binary) > 0 && Binary[0] == '/' {
+		binary, err = os.ReadFile(Binary)
+		if err != nil {
+			return rc{}, fmt.Errorf("read custom binary path: %w", err)
+		}
+	}
+
+	compiled, err := runtime.CompileModule(ctx, binary)
+	if err != nil {
+		return rc{}, err
+	}
+
+	return rc{
+		Runtime:        runtime,
+		CompiledModule: compiled,
+	}, nil
+})
+
 func newModule(dir string) (module, error)   { return newModuleOpt(dir, false) }
 func newModuleRO(dir string) (module, error) { return newModuleOpt(dir, true) }
 func newModuleOpt(dir string, readOnly bool) (module, error) {
-	if compiled == nil {
-		return module{}, fmt.Errorf("%w, please set with `import _ \"go.senan.xyz/taglib-wasm/embed\"`", ErrNoBinary)
+	rt, err := getRuntimeOnce()
+	if err != nil {
+		return module{}, fmt.Errorf("get runtime once: %w", err)
 	}
 
 	fsConfig := wazero.NewFSConfig()
@@ -141,7 +192,7 @@ func newModuleOpt(dir string, readOnly bool) (module, error) {
 		WithFSConfig(fsConfig)
 
 	ctx := context.Background()
-	mod, err := runtime.InstantiateModule(ctx, compiled, cfg)
+	mod, err := rt.Runtime.InstantiateModule(ctx, rt.CompiledModule, cfg)
 	if err != nil {
 		return module{}, err
 	}
@@ -224,26 +275,7 @@ func (m *module) close() {
 	}
 }
 
-var runtime wazero.Runtime
-var compiled wazero.CompiledModule
-
 func LoadBinary(ctx context.Context, bin []byte) {
-	runtime = wazero.NewRuntime(ctx)
-	wasi_snapshot_preview1.MustInstantiate(ctx, runtime)
-
-	_, err := runtime.
-		NewHostModuleBuilder("env").
-		NewFunctionBuilder().WithFunc(func(int32) int32 { panic("__cxa_allocate_exception") }).Export("__cxa_allocate_exception").
-		NewFunctionBuilder().WithFunc(func(int32, int32, int32) { panic("__cxa_throw") }).Export("__cxa_throw").
-		Instantiate(ctx)
-	if err != nil {
-		panic(err)
-	}
-
-	compiled, err = runtime.CompileModule(ctx, bin)
-	if err != nil {
-		panic(err)
-	}
 }
 
 func makeString(m *module, s string) uint32 {

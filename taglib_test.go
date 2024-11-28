@@ -14,7 +14,6 @@ import (
 
 	"github.com/r3labs/diff/v3"
 	"go.senan.xyz/taglib-wasm"
-	_ "go.senan.xyz/taglib-wasm/embed"
 )
 
 var (

@@ -1,3 +1,4 @@
+//go:build ignore
 #include <cstring>
 #include <iostream>
 
