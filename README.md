@@ -10,9 +10,7 @@ This project is a Go library for reading and writing audio metadata tags. It pro
 - Safe for concurrent use
 - [Fast](#performance)
 
-## Getting Started
-
-### Usage
+## Usage
 
 ### Reading Tags
 
