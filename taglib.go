@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
+var ErrNoBinary = fmt.Errorf("WASM binary not set")
 var ErrInvalidFile = fmt.Errorf("invalid file")
 var ErrSavingFile = fmt.Errorf("can't save file")
 
@@ -24,7 +24,11 @@ func ReadTags(path string) (map[string][]string, error) {
 		return nil, fmt.Errorf("make path abs %w", err)
 	}
 
-	mod := newModule()
+	dir := filepath.Dir(path)
+	mod, err := newModuleRO(dir)
+	if err != nil {
+		return nil, fmt.Errorf("init module: %w", err)
+	}
 	defer mod.close()
 
 	var raw []string
@@ -58,7 +62,11 @@ func ReadProperties(path string) (Properties, error) {
 		return Properties{}, fmt.Errorf("make path abs %w", err)
 	}
 
-	mod := newModule()
+	dir := filepath.Dir(path)
+	mod, err := newModuleRO(dir)
+	if err != nil {
+		return Properties{}, fmt.Errorf("init module: %w", err)
+	}
 	defer mod.close()
 
 	const (
@@ -87,7 +95,11 @@ func WriteTags(path string, tags map[string][]string) error {
 		return fmt.Errorf("make path abs %w", err)
 	}
 
-	mod := newModule()
+	dir := filepath.Dir(path)
+	mod, err := newModule(dir)
+	if err != nil {
+		return fmt.Errorf("init module: %w", err)
+	}
 	defer mod.close()
 
 	var raw []string
@@ -109,30 +121,38 @@ type module struct {
 	mod api.Module
 }
 
-func newModule() module {
+func newModule(dir string) (module, error)   { return newModuleOpt(dir, false) }
+func newModuleRO(dir string) (module, error) { return newModuleOpt(dir, true) }
+func newModuleOpt(dir string, readOnly bool) (module, error) {
 	if compiled == nil {
-		panic("WASM binary not set. please set with `import _ \"go.senan.xyz/taglib-wasm/embed\"`")
+		return module{}, fmt.Errorf("%w, please set with `import _ \"go.senan.xyz/taglib-wasm/embed\"`", ErrNoBinary)
+	}
+
+	fsConfig := wazero.NewFSConfig()
+	if readOnly {
+		fsConfig = fsConfig.WithReadOnlyDirMount(dir, dir)
+	} else {
+		fsConfig = fsConfig.WithDirMount(dir, dir)
 	}
 
 	cfg := wazero.
 		NewModuleConfig().
-		WithStdout(os.Stdout).
-		WithStderr(os.Stderr).
 		WithName("").
-		WithFSConfig(wazero.NewFSConfig().WithDirMount("/", "/"))
+		WithFSConfig(fsConfig)
 
 	ctx := context.Background()
 	mod, err := runtime.InstantiateModule(ctx, compiled, cfg)
 	if err != nil {
-		panic(err)
+		return module{}, err
 	}
 
 	if _, err := mod.ExportedFunction("_initialize").Call(ctx); err != nil {
-		panic(err)
+		return module{}, fmt.Errorf("_initialize: %w", err)
 	}
+
 	return module{
 		mod: mod,
-	}
+	}, nil
 }
 
 func (m *module) malloc(size uint32) uint32 {
@@ -214,7 +234,8 @@ func LoadBinary(ctx context.Context, bin []byte) {
 	_, err := runtime.
 		NewHostModuleBuilder("env").
 		NewFunctionBuilder().WithFunc(func(int32) int32 { panic("__cxa_allocate_exception") }).Export("__cxa_allocate_exception").
-		NewFunctionBuilder().WithFunc(func(int32, int32, int32) { panic("__cxa_throw") }).Export("__cxa_throw").Instantiate(ctx)
+		NewFunctionBuilder().WithFunc(func(int32, int32, int32) { panic("__cxa_throw") }).Export("__cxa_throw").
+		Instantiate(ctx)
 	if err != nil {
 		panic(err)
 	}
