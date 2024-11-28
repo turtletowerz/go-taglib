@@ -128,10 +128,6 @@ func WriteTags(path string, tags map[string][]string) error {
 	return nil
 }
 
-type module struct {
-	mod api.Module
-}
-
 type rc struct {
 	wazero.Runtime
 	wazero.CompiledModule
@@ -140,10 +136,19 @@ type rc struct {
 var getRuntimeOnce = sync.OnceValues(func() (rc, error) {
 	ctx := context.Background()
 
-	runtime := wazero.NewRuntime(ctx)
+	cacheDir := filepath.Join(os.TempDir(), "go-taglib-wasm")
+	compilationCache, err := wazero.NewCompilationCacheWithDir(cacheDir)
+	if err != nil {
+		return rc{}, err
+	}
+
+	runtime := wazero.NewRuntimeWithConfig(ctx,
+		wazero.NewRuntimeConfig().
+			WithCompilationCache(compilationCache),
+	)
 	wasi_snapshot_preview1.MustInstantiate(ctx, runtime)
 
-	_, err := runtime.
+	_, err = runtime.
 		NewHostModuleBuilder("env").
 		NewFunctionBuilder().WithFunc(func(int32) int32 { panic("__cxa_allocate_exception") }).Export("__cxa_allocate_exception").
 		NewFunctionBuilder().WithFunc(func(int32, int32, int32) { panic("__cxa_throw") }).Export("__cxa_throw").
@@ -170,6 +175,10 @@ var getRuntimeOnce = sync.OnceValues(func() (rc, error) {
 		CompiledModule: compiled,
 	}, nil
 })
+
+type module struct {
+	mod api.Module
+}
 
 func newModule(dir string) (module, error)   { return newModuleOpt(dir, false) }
 func newModuleRO(dir string) (module, error) { return newModuleOpt(dir, true) }
@@ -273,9 +282,6 @@ func (m *module) close() {
 	if err := m.mod.Close(context.Background()); err != nil {
 		panic(err)
 	}
-}
-
-func LoadBinary(ctx context.Context, bin []byte) {
 }
 
 func makeString(m *module, s string) uint32 {
