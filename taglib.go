@@ -22,9 +22,9 @@ import (
 //go:generate wasm-opt --strip -c -O3 taglib.wasm -o taglib.wasm
 
 //go:embed taglib.wasm
-var Binary string // WASM blob, can also be a filesystem path. To override, go build -ldflags="-X 'go.senan.xyz/taglib-wasm.Binary=/path/to/taglib.wasm'"
+var Binary []byte // WASM blob. To override, go build -ldflags="-X 'go.senan.xyz/taglib-wasm.BinaryPath=/path/to/taglib.wasm'"
+var BinaryPath string
 
-var ErrNoBinary = fmt.Errorf("WASM binary not set")
 var ErrInvalidFile = fmt.Errorf("invalid file")
 var ErrSavingFile = fmt.Errorf("can't save file")
 
@@ -157,12 +157,13 @@ var getRuntimeOnce = sync.OnceValues(func() (rc, error) {
 		return rc{}, err
 	}
 
-	var binary = []byte(Binary)
-	if len(Binary) > 0 && Binary[0] == '/' {
-		binary, err = os.ReadFile(Binary)
+	var binary = Binary
+	if BinaryPath != "" {
+		binary, err = os.ReadFile(BinaryPath)
 		if err != nil {
 			return rc{}, fmt.Errorf("read custom binary path: %w", err)
 		}
+		clear(Binary)
 	}
 
 	compiled, err := runtime.CompileModule(ctx, binary)
