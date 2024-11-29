@@ -22,7 +22,7 @@ import (
 //go:generate wasm-opt --strip -c -O3 taglib.wasm -o taglib.wasm
 
 //go:embed taglib.wasm
-var binary []byte // WASM blob. To override, go build -ldflags="-X 'go.senan.xyz/taglib-wasm.binaryPath=/path/to/taglib.wasm'"
+var binary []byte // WASM blob. To override, go build -ldflags="-X 'go.senan.xyz/taglib.binaryPath=/path/to/taglib.wasm'"
 var binaryPath string
 
 var ErrInvalidFile = fmt.Errorf("invalid file")

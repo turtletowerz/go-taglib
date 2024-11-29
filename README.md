@@ -1,4 +1,4 @@
-# TagLib WASM
+# go-taglib
 
 This project is a Go library for reading and writing audio metadata tags. It provides a portable solution with no external dependencies required, thanks to an embedded WASM binary.
 
@@ -15,7 +15,7 @@ This project is a Go library for reading and writing audio metadata tags. It pro
 ### Reading Tags
 
 ```go
-import "go.senan.xyz/taglib-wasm"
+import "go.senan.xyz/taglib"
 
 tags, err := taglib.ReadTags("path/to/audiofile.mp3")
 // check(err)
@@ -25,7 +25,7 @@ fmt.Println(tags)
 ### Writing Tags
 
 ```go
-import "go.senan.xyz/taglib-wasm"
+import "go.senan.xyz/taglib"
 
 err := taglib.WriteTags("path/to/audiofile.mp3", map[string][]string{
     "ALBUMARTISTS":        {"David Bynre", "Brian Eno"},
@@ -38,7 +38,7 @@ err := taglib.WriteTags("path/to/audiofile.mp3", map[string][]string{
 ### Reading Audio Properties
 
 ```go
-import "go.senan.xyz/taglib-wasm"
+import "go.senan.xyz/taglib"
 
 properties, err := taglib.ReadProperties("path/to/audiofile.mp3")
 // check(err)
@@ -53,8 +53,8 @@ The binary is already included in the package. However if you want to manually b
 2. Clone this repository and Git submodules
 
    ```console
-   $ git clone "https://github.com/sentriz/go-taglib-wasm.git" --recursive
-   $ cd go-taglib-wasm
+   $ git clone "https://github.com/sentriz/go-taglib.git" --recursive
+   $ cd go-taglib
    ```
 
 3. Generate the WASM binary:
@@ -67,7 +67,7 @@ The binary is already included in the package. However if you want to manually b
 4. Use the new binary in your project
 
    ```console
-   $ GCO_ENABLED=0 go build -ldflags="-X 'go.senan.xyz/taglib-wasm.binaryPath=/path/to/taglib.wasm'" ./your/project/...
+   $ GCO_ENABLED=0 go build -ldflags="-X 'go.senan.xyz/taglib.binaryPath=/path/to/taglib.wasm'" ./your/project/...
    ```
 
 ### Performance
@@ -77,7 +77,7 @@ In this example, tracks are read on average in `0.3 ms`, and written in `1.85 ms
 ```
 goos: linux
 goarch: amd64
-pkg: go.senan.xyz/taglib-wasm
+pkg: go.senan.xyz/taglib
 cpu: AMD Ryzen 7 7840U w/ Radeon  780M Graphics
 BenchmarkWrite-16         608   1847873 ns/op
 BenchmarkRead-16         3802    299247 ns/op

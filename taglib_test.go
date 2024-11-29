@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/r3labs/diff/v3"
-	"go.senan.xyz/taglib-wasm"
+	"go.senan.xyz/taglib"
 )
 
 var (

@@ -1,4 +1,4 @@
-module go.senan.xyz/taglib-wasm
+module go.senan.xyz/taglib
 
 go 1.23
 
