@@ -199,16 +199,13 @@ func newModuleOpt(dir string, readOnly bool) (module, error) {
 	cfg := wazero.
 		NewModuleConfig().
 		WithName("").
+		WithStartFunctions("_initialize").
 		WithFSConfig(fsConfig)
 
 	ctx := context.Background()
 	mod, err := rt.Runtime.InstantiateModule(ctx, rt.CompiledModule, cfg)
 	if err != nil {
 		return module{}, err
-	}
-
-	if _, err := mod.ExportedFunction("_initialize").Call(ctx); err != nil {
-		return module{}, fmt.Errorf("_initialize: %w", err)
 	}
 
 	return module{
