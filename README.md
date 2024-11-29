@@ -67,7 +67,7 @@ The binary is already included in the package. However if you want to manually b
 4. Use the new binary in your project
 
    ```console
-   $ GCO_ENABLED=0 go build -ldflags="-X 'go.senan.xyz/taglib-wasm.BinaryPath=/path/to/taglib.wasm'" ./your/project/...
+   $ GCO_ENABLED=0 go build -ldflags="-X 'go.senan.xyz/taglib-wasm.binaryPath=/path/to/taglib.wasm'" ./your/project/...
    ```
 
 ### Performance
