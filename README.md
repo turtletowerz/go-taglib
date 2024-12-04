@@ -2,6 +2,8 @@
 
 This project is a Go library for reading and writing audio metadata tags. It provides a portable solution with no external dependencies required, thanks to an embedded WASM binary.
 
+[![godoc](https://img.shields.io/badge/pkg.go.dev-doc-blue)](http://pkg.go.dev/go.senan.xyz/taglib)
+
 ## Features
 
 - **Read** and **write** metadata tags for audio files, including support for multi-valued tags.
