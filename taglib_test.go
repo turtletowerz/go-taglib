@@ -53,8 +53,8 @@ func TestClear(t *testing.T) {
 			got, err := taglib.ReadTags(path)
 			nilErr(t, err)
 
-			if !maps.EqualFunc(got, map[string][]string(nil), slices.Equal) {
-				t.Fatalf("%v != %v", got, nil)
+			if len(got) > 0 {
+				t.Fatalf("exp empty, got %v", got)
 			}
 		})
 	}
