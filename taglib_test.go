@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -71,7 +72,7 @@ func TestReadWrite(t *testing.T) {
 			"NINE": {"nine"},
 		},
 		{
-			"ARTIST":     {"Example A"},
+			"ARTIST":     {"Example A", "Hello, 世界"},
 			"ALUMARTIST": {"Example"},
 		},
 		{
@@ -83,6 +84,15 @@ func TestReadWrite(t *testing.T) {
 		{
 			"ARTIST":     {"Example A", "Example B"},
 			"ALUMARTIST": {"Example"},
+		},
+		{
+			"ARTIST": {"Hello, 世界", "界世"},
+		},
+		{
+			"ARTIST":      {"Hello, 世界", "界世"},
+			"ALBUM":       {longString},
+			"ALBUMARTIST": {longString, longString},
+			"OTHER":       {strings.Repeat(longString, 2)},
 		},
 	}
 
@@ -294,3 +304,5 @@ var bigTags = map[string][]string{
 	"TRACKNUMBER":                {"2"},
 	"UPC":                        {"3760271710486"},
 }
+
+var longString = strings.Repeat("E", 65536)
