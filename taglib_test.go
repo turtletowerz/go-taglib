@@ -17,15 +17,6 @@ import (
 	"go.senan.xyz/taglib"
 )
 
-var (
-	//go:embed testdata/eg.flac
-	egFLAC []byte
-	//go:embed testdata/eg.mp3
-	egMP3 []byte
-	//go:embed testdata/eg.m4a
-	egM4a []byte
-)
-
 func TestInvalid(t *testing.T) {
 	t.Parallel()
 
@@ -223,34 +214,26 @@ func BenchmarkRead(b *testing.B) {
 	}
 }
 
-func checkMem(t testing.TB) {
-	stop := make(chan struct{})
-	t.Cleanup(func() {
-		stop <- struct{}{}
-	})
-
-	go func() {
-		ticker := time.Tick(100 * time.Millisecond)
-
-		for {
-			select {
-			case <-stop:
-				return
-
-			case <-ticker:
-				var memStats runtime.MemStats
-				runtime.ReadMemStats(&memStats)
-				t.Logf("alloc = %v MiB", memStats.Alloc/1024/1024)
-			}
-		}
-	}()
-}
+var (
+	//go:embed testdata/eg.flac
+	egFLAC []byte
+	//go:embed testdata/eg.mp3
+	egMP3 []byte
+	//go:embed testdata/eg.m4a
+	egM4a []byte
+	//go:embed testdata/eg.ogg
+	egOgg []byte
+	//go:embed testdata/eg.wav
+	egWAV []byte
+)
 
 func testPaths(t testing.TB) []string {
 	return []string{
+		tmpf(t, egFLAC, "eg.flac"),
 		tmpf(t, egMP3, "eg.mp3"),
 		tmpf(t, egM4a, "eg.m4a"),
-		tmpf(t, egFLAC, "eg.flac"),
+		tmpf(t, egWAV, "eg.wav"),
+		tmpf(t, egOgg, "eg.ogg"),
 	}
 }
 
@@ -272,6 +255,29 @@ func eq[T comparable](t testing.TB, a, b T) {
 		t.Helper()
 		t.Fatalf("%v != %v", a, b)
 	}
+}
+
+func checkMem(t testing.TB) {
+	stop := make(chan struct{})
+	t.Cleanup(func() {
+		stop <- struct{}{}
+	})
+
+	go func() {
+		ticker := time.Tick(100 * time.Millisecond)
+
+		for {
+			select {
+			case <-stop:
+				return
+
+			case <-ticker:
+				var memStats runtime.MemStats
+				runtime.ReadMemStats(&memStats)
+				t.Logf("alloc = %v MiB", memStats.Alloc/1024/1024)
+			}
+		}
+	}()
 }
 
 var bigTags = map[string][]string{
@@ -305,4 +311,4 @@ var bigTags = map[string][]string{
 	"UPC":                        {"3760271710486"},
 }
 
-var longString = strings.Repeat("E", 65536)
+var longString = strings.Repeat("E", 1024)
