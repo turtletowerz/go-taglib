@@ -207,6 +207,8 @@ func BenchmarkWrite(b *testing.B) {
 
 func BenchmarkRead(b *testing.B) {
 	path := tmpf(b, egFLAC, "eg.flac")
+	err := taglib.WriteTags(path, bigTags)
+	nilErr(b, err)
 	b.ResetTimer()
 
 	for range b.N {
@@ -259,10 +261,40 @@ func nilErr(t testing.TB, err error) {
 		t.Fatalf("err: %v", err)
 	}
 }
-
 func eq[T comparable](t testing.TB, a, b T) {
 	if a != b {
 		t.Helper()
 		t.Fatalf("%v != %v", a, b)
 	}
+}
+
+var bigTags = map[string][]string{
+	"ALBUM":                      {"New Raceion"},
+	"ALBUMARTIST":                {"Alan Vega"},
+	"ALBUMARTIST_CREDIT":         {"Alan Vega"},
+	"ALBUMARTISTS":               {"Alan Vega"},
+	"ALBUMARTISTS_CREDIT":        {"Alan Vega"},
+	"ARTIST":                     {"Alan Vega"},
+	"ARTIST_CREDIT":              {"Alan Vega"},
+	"ARTISTS":                    {"Alan Vega"},
+	"ARTISTS_CREDIT":             {"Alan Vega"},
+	"DATE":                       {"1993-04-02"},
+	"DISCNUMBER":                 {"1"},
+	"GENRE":                      {"electronic"},
+	"GENRES":                     {"electronic", "industrial", "experimental", "proto-punk", "rock", "rockabilly"},
+	"LABEL":                      {"GM Editions"},
+	"MEDIA":                      {"Digital Media"},
+	"MUSICBRAINZ_ALBUMARTISTID":  {"dd720ac8-1c68-4484-abb7-0546413a55e3"},
+	"MUSICBRAINZ_ALBUMID":        {"c56a5905-2b3a-46f5-82c7-ce8eed01f876"},
+	"MUSICBRAINZ_ARTISTID":       {"dd720ac8-1c68-4484-abb7-0546413a55e3"},
+	"MUSICBRAINZ_RELEASEGROUPID": {"373dcce2-63c4-3e8a-9c2c-bc58ec1bbbf3"},
+	"MUSICBRAINZ_TRACKID":        {"2f1c8b43-7b4e-4bc8-aacf-760e5fb747a0"},
+	"ORIGINALDATE":               {"1993-04-02"},
+	"REPLAYGAIN_ALBUM_GAIN":      {"-4.58 dB"},
+	"REPLAYGAIN_ALBUM_PEAK":      {"0.977692"},
+	"REPLAYGAIN_TRACK_GAIN":      {"-5.29 dB"},
+	"REPLAYGAIN_TRACK_PEAK":      {"0.977661"},
+	"TITLE":                      {"Christ Dice"},
+	"TRACKNUMBER":                {"2"},
+	"UPC":                        {"3760271710486"},
 }
