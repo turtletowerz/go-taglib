@@ -43,7 +43,9 @@ func ReadTags(path string) (map[string][]string, error) {
 	defer mod.close()
 
 	var raw []string
-	mod.call("taglib_file_tags", &raw, path)
+	if err := mod.call("taglib_file_tags", &raw, path); err != nil {
+		return nil, fmt.Errorf("call: %w", err)
+	}
 	if raw == nil {
 		return nil, ErrInvalidFile
 	}
@@ -89,7 +91,9 @@ func ReadProperties(path string) (Properties, error) {
 	)
 
 	raw := make([]int, 0, audioPropertyLen)
-	mod.call("taglib_file_audioproperties", &raw, path)
+	if err := mod.call("taglib_file_audioproperties", &raw, path); err != nil {
+		return Properties{}, fmt.Errorf("call: %w", err)
+	}
 
 	return Properties{
 		Length:     time.Duration(raw[audioPropertyLengthInMilliseconds]) * time.Millisecond,
@@ -121,7 +125,9 @@ func WriteTags(path string, tags map[string][]string) error {
 	}
 
 	var out bool
-	mod.call("taglib_file_write_tags", &out, path, raw)
+	if err := mod.call("taglib_file_write_tags", &out, path, raw); err != nil {
+		return fmt.Errorf("call: %w", err)
+	}
 	if !out {
 		return ErrSavingFile
 	}
@@ -215,14 +221,16 @@ func newModuleOpt(dir string, readOnly bool) (module, error) {
 
 func (m *module) malloc(size uint32) uint32 {
 	var ptr uint32
-	m.call("malloc", &ptr, size)
+	if err := m.call("malloc", &ptr, size); err != nil {
+		panic(err)
+	}
 	if ptr == 0 {
 		panic("no ptr")
 	}
 	return ptr
 }
 
-func (m *module) call(name string, dest any, args ...any) {
+func (m *module) call(name string, dest any, args ...any) error {
 	params := make([]uint64, 0, len(args))
 	for _, a := range args {
 		switch a := a.(type) {
@@ -243,10 +251,10 @@ func (m *module) call(name string, dest any, args ...any) {
 
 	results, err := m.mod.ExportedFunction(name).Call(context.Background(), params...)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("call %q: %w", name, err)
 	}
 	if len(results) == 0 {
-		return
+		return nil
 	}
 	result := results[0]
 
@@ -274,6 +282,7 @@ func (m *module) call(name string, dest any, args ...any) {
 	default:
 		panic(fmt.Sprintf("unknown result type %T", dest))
 	}
+	return nil
 }
 
 func (m *module) close() {
