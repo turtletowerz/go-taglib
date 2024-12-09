@@ -4,15 +4,15 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
+	"slices"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/r3labs/diff/v3"
 	"go.senan.xyz/taglib"
 )
 
@@ -26,12 +26,16 @@ var (
 )
 
 func TestInvalid(t *testing.T) {
+	t.Parallel()
+
 	path := tmpf(t, []byte("not a file"), "eg.flac")
 	_, err := taglib.ReadTags(path)
 	eq(t, err, taglib.ErrInvalidFile)
 }
 
 func TestClear(t *testing.T) {
+	t.Parallel()
+
 	paths := testPaths(t)
 	for _, path := range paths {
 		t.Run(filepath.Base(path), func(t *testing.T) {
@@ -49,12 +53,16 @@ func TestClear(t *testing.T) {
 			got, err := taglib.ReadTags(path)
 			nilErr(t, err)
 
-			difft(t, nil, got)
+			if !maps.EqualFunc(got, map[string][]string(nil), slices.Equal) {
+				t.Fatalf("%v != %v", got, nil)
+			}
 		})
 	}
 }
 
 func TestReadWrite(t *testing.T) {
+	t.Parallel()
+
 	paths := testPaths(t)
 	testTags := []map[string][]string{
 		{
@@ -87,13 +95,17 @@ func TestReadWrite(t *testing.T) {
 				got, err := taglib.ReadTags(path)
 				nilErr(t, err)
 
-				difft(t, tags, got)
+				if !maps.EqualFunc(got, tags, slices.Equal) {
+					t.Fatalf("%v != %v", got, tags)
+				}
 			})
 		}
 	}
 }
 
 func TestConcurrent(t *testing.T) {
+	t.Parallel()
+
 	paths := testPaths(t)
 
 	c := 250
@@ -116,6 +128,8 @@ func TestConcurrent(t *testing.T) {
 }
 
 func TestAudioProperties(t *testing.T) {
+	t.Parallel()
+
 	path := tmpf(t, egFLAC, "eg.flac")
 
 	properties, err := taglib.ReadProperties(path)
@@ -128,6 +142,8 @@ func TestAudioProperties(t *testing.T) {
 }
 
 func TestMultiOpen(t *testing.T) {
+	t.Parallel()
+
 	{
 		path := tmpf(t, egFLAC, "eg.flac")
 		_, err := taglib.ReadTags(path)
@@ -141,6 +157,8 @@ func TestMultiOpen(t *testing.T) {
 }
 
 func TestMemNew(t *testing.T) {
+	t.Parallel()
+
 	t.Skip("heavy")
 
 	checkMem(t)
@@ -155,6 +173,8 @@ func TestMemNew(t *testing.T) {
 }
 
 func TestMemSameFile(t *testing.T) {
+	t.Parallel()
+
 	t.Skip("heavy")
 
 	checkMem(t)
@@ -198,7 +218,7 @@ func BenchmarkRead(b *testing.B) {
 func checkMem(t testing.TB) {
 	stop := make(chan struct{})
 	t.Cleanup(func() {
-		close(stop)
+		stop <- struct{}{}
 	})
 
 	go func() {
@@ -206,10 +226,8 @@ func checkMem(t testing.TB) {
 
 		for {
 			select {
-			case _, ok := <-stop:
-				if !ok {
-					return
-				}
+			case <-stop:
+				return
 
 			case <-ticker:
 				var memStats runtime.MemStats
@@ -247,29 +265,4 @@ func eq[T comparable](t testing.TB, a, b T) {
 		t.Helper()
 		t.Fatalf("%v != %v", a, b)
 	}
-}
-
-func difft(t testing.TB, a, b any) {
-	changes, err := diff.Diff(a, b)
-	nilErr(t, err)
-
-	if len(changes) == 0 {
-		return
-	}
-
-	t.Helper()
-
-	for _, c := range changes {
-		path := strings.Join(c.Path, ".")
-		switch c.Type {
-		case diff.DELETE:
-			t.Logf("(del) %s\t%q", path, c.From)
-		case diff.UPDATE:
-			t.Logf("(chg) %s\t%q -> %q", path, c.From, c.To)
-		case diff.CREATE:
-			t.Logf("(add) %s\t%q", path, c.To)
-		}
-	}
-
-	t.FailNow()
 }
