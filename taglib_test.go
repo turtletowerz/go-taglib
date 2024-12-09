@@ -195,12 +195,8 @@ func BenchmarkWrite(b *testing.B) {
 	path := tmpf(b, egFLAC, "eg.flac")
 	b.ResetTimer()
 
-	t := map[string][]string{
-		"ARTIST": {"Artist"},
-	}
-
 	for range b.N {
-		err := taglib.WriteTags(path, t)
+		err := taglib.WriteTags(path, bigTags)
 		nilErr(b, err)
 	}
 }
