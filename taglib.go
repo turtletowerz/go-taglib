@@ -28,6 +28,118 @@ var binaryPath string
 var ErrInvalidFile = fmt.Errorf("invalid file")
 var ErrSavingFile = fmt.Errorf("can't save file")
 
+// These constants define normalized tag keys used by TagLib's [property mapping].
+// When using [ReadTags], the library will map format-specific metadata to these standardized keys.
+// Similarly, [WriteTags] will map these keys back to the appropriate format-specific fields.
+//
+// While these constants provide a consistent interface across different audio formats,
+// you can also use custom tag keys if the underlying format supports arbitrary tags.
+//
+// [property mapping]: https://taglib.org/api/p_propertymapping.html
+const (
+	AcoustIDFingerprint       = "ACOUSTID_FINGERPRINT"
+	AcoustIDID                = "ACOUSTID_ID"
+	Album                     = "ALBUM"
+	AlbumArtist               = "ALBUMARTIST"
+	AlbumArtistSort           = "ALBUMARTISTSORT"
+	AlbumSort                 = "ALBUMSORT"
+	Arranger                  = "ARRANGER"
+	Artist                    = "ARTIST"
+	Artists                   = "ARTISTS"
+	ArtistSort                = "ARTISTSORT"
+	ArtistWebpage             = "ARTISTWEBPAGE"
+	ASIN                      = "ASIN"
+	AudioSourceWebpage        = "AUDIOSOURCEWEBPAGE"
+	Barcode                   = "BARCODE"
+	BPM                       = "BPM"
+	CatalogNumber             = "CATALOGNUMBER"
+	Comment                   = "COMMENT"
+	Compilation               = "COMPILATION"
+	Composer                  = "COMPOSER"
+	ComposerSort              = "COMPOSERSORT"
+	Conductor                 = "CONDUCTOR"
+	Copyright                 = "COPYRIGHT"
+	CopyrightURL              = "COPYRIGHTURL"
+	Date                      = "DATE"
+	DiscNumber                = "DISCNUMBER"
+	DiscSubtitle              = "DISCSUBTITLE"
+	DJMixer                   = "DJMIXER"
+	EncodedBy                 = "ENCODEDBY"
+	Encoding                  = "ENCODING"
+	EncodingTime              = "ENCODINGTIME"
+	Engineer                  = "ENGINEER"
+	FileType                  = "FILETYPE"
+	FileWebpage               = "FILEWEBPAGE"
+	GaplessPlayback           = "GAPLESSPLAYBACK"
+	Genre                     = "GENRE"
+	Grouping                  = "GROUPING"
+	InitialKey                = "INITIALKEY"
+	InvolvedPeople            = "INVOLVEDPEOPLE"
+	ISRC                      = "ISRC"
+	Label                     = "LABEL"
+	Language                  = "LANGUAGE"
+	Length                    = "LENGTH"
+	License                   = "LICENSE"
+	Lyricist                  = "LYRICIST"
+	Lyrics                    = "LYRICS"
+	Media                     = "MEDIA"
+	Mixer                     = "MIXER"
+	Mood                      = "MOOD"
+	MovementCount             = "MOVEMENTCOUNT"
+	MovementName              = "MOVEMENTNAME"
+	MovementNumber            = "MOVEMENTNUMBER"
+	MusicBrainzAlbumID        = "MUSICBRAINZ_ALBUMID"
+	MusicBrainzAlbumArtistID  = "MUSICBRAINZ_ALBUMARTISTID"
+	MusicBrainzArtistID       = "MUSICBRAINZ_ARTISTID"
+	MusicBrainzReleaseGroupID = "MUSICBRAINZ_RELEASEGROUPID"
+	MusicBrainzReleaseTrackID = "MUSICBRAINZ_RELEASETRACKID"
+	MusicBrainzTrackID        = "MUSICBRAINZ_TRACKID"
+	MusicBrainzWorkID         = "MUSICBRAINZ_WORKID"
+	MusicianCredits           = "MUSICIANCREDITS"
+	MusicIPPUID               = "MUSICIP_PUID"
+	OriginalAlbum             = "ORIGINALALBUM"
+	OriginalArtist            = "ORIGINALARTIST"
+	OriginalDate              = "ORIGINALDATE"
+	OriginalFilename          = "ORIGINALFILENAME"
+	OriginalLyricist          = "ORIGINALLYRICIST"
+	Owner                     = "OWNER"
+	PaymentWebpage            = "PAYMENTWEBPAGE"
+	Performer                 = "PERFORMER"
+	PlaylistDelay             = "PLAYLISTDELAY"
+	Podcast                   = "PODCAST"
+	PodcastCategory           = "PODCASTCATEGORY"
+	PodcastDesc               = "PODCASTDESC"
+	PodcastID                 = "PODCASTID"
+	PodcastURL                = "PODCASTURL"
+	ProducedNotice            = "PRODUCEDNOTICE"
+	Producer                  = "PRODUCER"
+	PublisherWebpage          = "PUBLISHERWEBPAGE"
+	RadioStation              = "RADIOSTATION"
+	RadioStationOwner         = "RADIOSTATIONOWNER"
+	RadioStationWebpage       = "RADIOSTATIONWEBPAGE"
+	ReleaseCountry            = "RELEASECOUNTRY"
+	ReleaseDate               = "RELEASEDATE"
+	ReleaseStatus             = "RELEASESTATUS"
+	ReleaseType               = "RELEASETYPE"
+	Remixer                   = "REMIXER"
+	Script                    = "SCRIPT"
+	ShowSort                  = "SHOWSORT"
+	ShowWorkMovement          = "SHOWWORKMOVEMENT"
+	Subtitle                  = "SUBTITLE"
+	TaggingDate               = "TAGGINGDATE"
+	Title                     = "TITLE"
+	TitleSort                 = "TITLESORT"
+	TrackNumber               = "TRACKNUMBER"
+	TVEpisode                 = "TVEPISODE"
+	TVEpisodeID               = "TVEPISODEID"
+	TVNetwork                 = "TVNETWORK"
+	TVSeason                  = "TVSEASON"
+	TVShow                    = "TVSHOW"
+	URL                       = "URL"
+	Work                      = "WORK"
+)
+
+// ReadTags reads all metadata tags from an audio file at the given path.
 func ReadTags(path string) (map[string][]string, error) {
 	var err error
 	path, err = filepath.Abs(path)
@@ -61,13 +173,19 @@ func ReadTags(path string) (map[string][]string, error) {
 	return tags, nil
 }
 
+// Properties contains the audio properties of a media file.
 type Properties struct {
-	Length     time.Duration
-	Channels   uint
+	// Length is the duration of the audio
+	Length time.Duration
+	// Channels is the number of audio channels
+	Channels uint
+	// SampleRate in Hz
 	SampleRate uint
-	Bitrate    uint
+	// Bitrate in kbit/s
+	Bitrate uint
 }
 
+// ReadProperties reads the audio properties from a file at the given path.
 func ReadProperties(path string) (Properties, error) {
 	var err error
 	path, err = filepath.Abs(path)
@@ -103,6 +221,7 @@ func ReadProperties(path string) (Properties, error) {
 	}, nil
 }
 
+// WriteTags writes metadata tags to an audio file at the given path.
 func WriteTags(path string, tags map[string][]string) error {
 	var err error
 	path, err = filepath.Abs(path)

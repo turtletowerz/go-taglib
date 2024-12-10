@@ -1,50 +1,62 @@
 # go-taglib
 
-This project is a Go library for reading and writing audio metadata tags. It provides a portable solution with no external dependencies required, thanks to an embedded WASM binary.
+This project is a Go library for reading and writing audio metadata tags. It provides a portable solution with no external dependencies required, thanks to an embedded **WASM** binary.
 
 [![godoc](https://img.shields.io/badge/pkg.go.dev-doc-blue)](http://pkg.go.dev/go.senan.xyz/taglib)
 
 ## Features
 
-- **Read** and **write** metadata tags for audio files, including support for multi-valued tags.
+- **Read** and **write** metadata tags for audio files, including support for **multi-valued** tags.
 - Retrieve audio properties such as length, bitrate, sample rate, and channels.
 - Supports multiple audio formats including _MP3_, _FLAC_, _M4A_, _WAV_, _OGG_, _WMA_, and more.
 - Safe for concurrent use
-- [Fast](#performance)
+- [Reasonably fast](#performance)
 
 ## Usage
 
-### Reading Tags
+Add the library to your project with `go get go.senan.xyz/taglib@latest`
+
+### Reading metadata
 
 ```go
-import "go.senan.xyz/taglib"
+func main() {
+    tags, err := taglib.ReadTags("path/to/audiofile.mp3")
+    // check(err)
+    fmt.Printf("tags: %v\n", tags) // map[string][]string
 
-tags, err := taglib.ReadTags("path/to/audiofile.mp3")
-// check(err)
-fmt.Println(tags)
+    fmt.Printf("AlbumArtist: %q\n", tags[taglib.AlbumArtist])
+    fmt.Printf("Album: %q\n", tags[taglib.Album])
+    fmt.Printf("TrackNumber: %q\n", tags[taglib.TrackNumber])
+}
 ```
 
-### Writing Tags
+### Writing metadata
 
 ```go
-import "go.senan.xyz/taglib"
+func main() {
+    err := taglib.WriteTags("path/to/audiofile.mp3", map[string][]string{
+     // Multi-valued tags allowed
+     taglib.AlbumArtist:   {"David Bynre", "Brian Eno"},
+     taglib.Album:         {"My Life in the Bush of Ghosts"},
+     taglib.TrackNumber:   {"1"},
 
-err := taglib.WriteTags("path/to/audiofile.mp3", map[string][]string{
-    "ALBUMARTISTS":        {"David Bynre", "Brian Eno"},
-    "ALBUMARTISTS_CREDIT": {"Brian Eno & David Bynre"},
-    "ALBUM":               {"My Life in the Bush of Ghosts"},
-    "TRACKNUMBER":         {"1"},
-})
+     // Non-standard allowed too
+     "ALBUMARTIST_CREDIT": {"Brian Eno & David Bynre"},
+    })
+}
 ```
 
-### Reading Audio Properties
+### Reading properties
 
 ```go
-import "go.senan.xyz/taglib"
-
-properties, err := taglib.ReadProperties("path/to/audiofile.mp3")
-// check(err)
-fmt.Printf("Length: %v, Bitrate: %d, SampleRate: %d, Channels: %d\n", properties.Length, properties.Bitrate, properties.SampleRate, properties.Channels)
+func main() {
+    properties, err := taglib.ReadProperties("path/to/audiofile.mp3")
+    // check(err)
+    fmt.Printf("Length: %v\n", properties.Length)
+    fmt.Printf("Bitrate: %d\n", properties.Bitrate)
+    fmt.Printf("SampleRate: %d\n", properties.SampleRate)
+    fmt.Printf("Channels: %d\n", properties.Channels)
+}
 ```
 
 ## Manually Building and Using the WASM Binary
