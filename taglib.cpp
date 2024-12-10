@@ -5,6 +5,14 @@
 #include "fileref.h"
 #include "tpropertymap.h"
 
+char *stringToCharArray(const TagLib::String &s) {
+  const std::string str = s.to8Bit(true);
+  return ::strdup(str.c_str());
+}
+TagLib::String charArrayToString(const char *s) {
+  return TagLib::String(s, TagLib::String::UTF8);
+}
+
 __attribute__((export_name("malloc"))) void *exported_malloc(size_t size) {
   return malloc(size);
 }
@@ -28,13 +36,8 @@ taglib_file_tags(const char *filename) {
   size_t i = 0;
   for (const auto &kvs : properties)
     for (const auto &v : kvs.second) {
-      TagLib::String row;
-      row.append(kvs.first);
-      row.append("\t");
-      row.append(v);
-      tags[i] = static_cast<char *>(malloc(row.size() + 1));
-      strncpy(tags[i], row.toCString(), row.size());
-      tags[i][row.size()] = '\0';
+      TagLib::String row = kvs.first + "\t" + v;
+      tags[i] = stringToCharArray(row);
       i++;
     }
   tags[len] = nullptr;
@@ -53,7 +56,7 @@ taglib_file_write_tags(const char *filename, const char **tags) {
 
   TagLib::PropertyMap properties;
   for (size_t i = 0; tags[i] != NULL; i++) {
-    TagLib::String row = tags[i];
+    TagLib::String row = charArrayToString(tags[i]);
     if (auto ti = row.find("\t"); ti >= 0) {
       TagLib::String key(row.substr(0, ti));
       TagLib::StringList value(row.substr(ti + 1));
@@ -70,8 +73,12 @@ taglib_file_write_tags(const char *filename, const char **tags) {
 __attribute__((export_name("taglib_file_audioproperties"))) int *
 taglib_file_audioproperties(const char *filename) {
   TagLib::FileRef file(filename);
+  if (file.isNull() || !file.audioProperties())
+    return nullptr;
 
   int *arr = static_cast<int *>(malloc(4 * sizeof(int)));
+  if (!arr)
+    return nullptr;
 
   auto audioProperties = file.audioProperties();
   arr[0] = audioProperties->lengthInMilliseconds();

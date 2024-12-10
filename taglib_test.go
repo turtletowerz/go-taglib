@@ -80,6 +80,10 @@ func TestReadWrite(t *testing.T) {
 			"ARTIST": {"Hello, 世界", "界世"},
 		},
 		{
+			"ARTIST": {"Brian Eno—David Byrne"},
+			"ALBUM":  {"My Life in the Bush of Ghosts"},
+		},
+		{
 			"ARTIST":      {"Hello, 世界", "界世"},
 			"ALBUM":       {longString},
 			"ALBUMARTIST": {longString, longString},
@@ -102,6 +106,13 @@ func TestReadWrite(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestReadExistingUnicode(t *testing.T) {
+	tags, err := taglib.ReadTags("testdata/normal.flac")
+	nilErr(t, err)
+	eq(t, len(tags[taglib.AlbumArtist]), 1)
+	eq(t, tags[taglib.AlbumArtist][0], "Brian Eno—David Byrne")
 }
 
 func TestConcurrent(t *testing.T) {
