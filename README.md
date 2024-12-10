@@ -1,6 +1,6 @@
 # go-taglib
 
-This project is a Go library for reading and writing audio metadata tags. It provides a portable solution with no external dependencies required, thanks to an embedded **WASM** binary.
+This project is a Go library for reading and writing audio metadata tags. By packaging an embedded **WASM** binary, the library needs no external dependencies or CGo. Meaning easy static builds and cross compilation.
 
 [![godoc](https://img.shields.io/badge/pkg.go.dev-doc-blue)](http://pkg.go.dev/go.senan.xyz/taglib)
 
@@ -22,6 +22,7 @@ Add the library to your project with `go get go.senan.xyz/taglib@latest`
 func main() {
     tags, err := taglib.ReadTags("path/to/audiofile.mp3")
     // check(err)
+
     fmt.Printf("tags: %v\n", tags) // map[string][]string
 
     fmt.Printf("AlbumArtist: %q\n", tags[taglib.AlbumArtist])
@@ -35,14 +36,15 @@ func main() {
 ```go
 func main() {
     err := taglib.WriteTags("path/to/audiofile.mp3", map[string][]string{
-     // Multi-valued tags allowed
-     taglib.AlbumArtist:   {"David Bynre", "Brian Eno"},
-     taglib.Album:         {"My Life in the Bush of Ghosts"},
-     taglib.TrackNumber:   {"1"},
+        // Multi-valued tags allowed
+        taglib.AlbumArtist:   {"David Bynre", "Brian Eno"},
+        taglib.Album:         {"My Life in the Bush of Ghosts"},
+        taglib.TrackNumber:   {"1"},
 
-     // Non-standard allowed too
-     "ALBUMARTIST_CREDIT": {"Brian Eno & David Bynre"},
+        // Non-standard allowed too
+        "ALBUMARTIST_CREDIT": {"Brian Eno & David Bynre"},
     })
+    // check(err)
 }
 ```
 
@@ -52,6 +54,7 @@ func main() {
 func main() {
     properties, err := taglib.ReadProperties("path/to/audiofile.mp3")
     // check(err)
+
     fmt.Printf("Length: %v\n", properties.Length)
     fmt.Printf("Bitrate: %d\n", properties.Bitrate)
     fmt.Printf("SampleRate: %d\n", properties.SampleRate)
