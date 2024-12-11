@@ -155,7 +155,7 @@ func ReadTags(path string) (map[string][]string, error) {
 	defer mod.close()
 
 	var raw []string
-	if err := mod.call("taglib_file_tags", &raw, path); err != nil {
+	if err := mod.call("taglib_file_tags", &raw, wasmPath(path)); err != nil {
 		return nil, fmt.Errorf("call: %w", err)
 	}
 	if raw == nil {
@@ -209,7 +209,7 @@ func ReadProperties(path string) (Properties, error) {
 	)
 
 	raw := make([]int, 0, audioPropertyLen)
-	if err := mod.call("taglib_file_audioproperties", &raw, path); err != nil {
+	if err := mod.call("taglib_file_audioproperties", &raw, wasmPath(path)); err != nil {
 		return Properties{}, fmt.Errorf("call: %w", err)
 	}
 
@@ -244,7 +244,7 @@ func WriteTags(path string, tags map[string][]string) error {
 	}
 
 	var out bool
-	if err := mod.call("taglib_file_write_tags", &out, path, raw); err != nil {
+	if err := mod.call("taglib_file_write_tags", &out, wasmPath(path), raw); err != nil {
 		return fmt.Errorf("call: %w", err)
 	}
 	if !out {
@@ -316,9 +316,9 @@ func newModuleOpt(dir string, readOnly bool) (module, error) {
 
 	fsConfig := wazero.NewFSConfig()
 	if readOnly {
-		fsConfig = fsConfig.WithReadOnlyDirMount(dir, dir)
+		fsConfig = fsConfig.WithReadOnlyDirMount(dir, wasmPath(dir))
 	} else {
-		fsConfig = fsConfig.WithDirMount(dir, dir)
+		fsConfig = fsConfig.WithDirMount(dir, wasmPath(dir))
 	}
 
 	cfg := wazero.
@@ -486,4 +486,9 @@ func readInts(m *module, ptr uint32, len int) []int {
 		ints = append(ints, int(i))
 	}
 	return ints
+}
+
+// WASI uses POSIXy paths, even on Windows
+func wasmPath(p string) string {
+	return filepath.ToSlash(p)
 }
