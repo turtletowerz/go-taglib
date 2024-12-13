@@ -5,11 +5,11 @@
 #include "fileref.h"
 #include "tpropertymap.h"
 
-char *stringToCharArray(const TagLib::String &s) {
+char *to_char_array(const TagLib::String &s) {
   const std::string str = s.to8Bit(true);
   return ::strdup(str.c_str());
 }
-TagLib::String charArrayToString(const char *s) {
+TagLib::String to_string(const char *s) {
   return TagLib::String(s, TagLib::String::UTF8);
 }
 
@@ -56,7 +56,7 @@ taglib_file_write_tags(const char *filename, const char **tags) {
 
   TagLib::PropertyMap properties;
   for (size_t i = 0; tags[i] != NULL; i++) {
-    TagLib::String row = charArrayToString(tags[i]);
+    TagLib::String row = to_string(tags[i]);
     if (auto ti = row.find("\t"); ti >= 0) {
       TagLib::String key(row.substr(0, ti));
       TagLib::StringList value(row.substr(ti + 1));
