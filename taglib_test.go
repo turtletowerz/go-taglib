@@ -32,14 +32,14 @@ func TestClear(t *testing.T) {
 	for _, path := range paths {
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			// set some tags first
-			err := taglib.WriteTags(path, map[string][]string{
+			err := taglib.ReplaceTags(path, map[string][]string{
 				"ARTIST":     {"Example A"},
 				"ALUMARTIST": {"Example"},
 			})
 			nilErr(t, err)
 
 			// then clear
-			err = taglib.WriteTags(path, nil)
+			err = taglib.ReplaceTags(path, nil)
 			nilErr(t, err)
 
 			got, err := taglib.ReadTags(path)
@@ -94,17 +94,85 @@ func TestReadWrite(t *testing.T) {
 	for _, path := range paths {
 		for i, tags := range testTags {
 			t.Run(fmt.Sprintf("%s_tags_%d", filepath.Base(path), i), func(t *testing.T) {
-				err := taglib.WriteTags(path, tags)
+				err := taglib.ReplaceTags(path, tags)
 				nilErr(t, err)
 
 				got, err := taglib.ReadTags(path)
 				nilErr(t, err)
 
-				if !maps.EqualFunc(got, tags, slices.Equal) {
-					t.Fatalf("%v != %v", got, tags)
-				}
+				tagEq(t, got, tags)
 			})
 		}
+	}
+}
+
+func TestMergeWrite(t *testing.T) {
+	t.Parallel()
+
+	paths := testPaths(t)
+
+	cmp := func(t *testing.T, path string, want map[string][]string) {
+		t.Helper()
+		tags, err := taglib.ReadTags(path)
+		nilErr(t, err)
+		tagEq(t, tags, want)
+	}
+
+	for _, path := range paths {
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			err := taglib.ReplaceTags(path, nil) // clear
+			nilErr(t, err)
+
+			err = taglib.WriteTags(path, map[string][]string{
+				"ONE": {"one"},
+			})
+			nilErr(t, err)
+			cmp(t, path, map[string][]string{
+				"ONE": {"one"},
+			})
+
+			nilErr(t, err)
+			err = taglib.WriteTags(path, map[string][]string{
+				"TWO": {"two", "two!"},
+			})
+			nilErr(t, err)
+			cmp(t, path, map[string][]string{
+				"ONE": {"one"},
+				"TWO": {"two", "two!"},
+			})
+
+			err = taglib.WriteTags(path, map[string][]string{
+				"THREE": {"three"},
+			})
+			nilErr(t, err)
+			cmp(t, path, map[string][]string{
+				"ONE":   {"one"},
+				"TWO":   {"two", "two!"},
+				"THREE": {"three"},
+			})
+
+			// change prev
+			err = taglib.WriteTags(path, map[string][]string{
+				"ONE": {"one new"},
+			})
+			nilErr(t, err)
+			cmp(t, path, map[string][]string{
+				"ONE":   {"one new"},
+				"TWO":   {"two", "two!"},
+				"THREE": {"three"},
+			})
+
+			// change prev
+			err = taglib.WriteTags(path, map[string][]string{
+				"ONE":   {},
+				"THREE": {"three new!"},
+			})
+			nilErr(t, err)
+			cmp(t, path, map[string][]string{
+				"TWO":   {"two", "two!"},
+				"THREE": {"three new!"},
+			})
+		})
 	}
 }
 
@@ -208,14 +276,14 @@ func BenchmarkWrite(b *testing.B) {
 	b.ResetTimer()
 
 	for range b.N {
-		err := taglib.WriteTags(path, bigTags)
+		err := taglib.ReplaceTags(path, bigTags)
 		nilErr(b, err)
 	}
 }
 
 func BenchmarkRead(b *testing.B) {
 	path := tmpf(b, egFLAC, "eg.flac")
-	err := taglib.WriteTags(path, bigTags)
+	err := taglib.ReplaceTags(path, bigTags)
 	nilErr(b, err)
 	b.ResetTimer()
 
@@ -265,6 +333,12 @@ func eq[T comparable](t testing.TB, a, b T) {
 	if a != b {
 		t.Helper()
 		t.Fatalf("%v != %v", a, b)
+	}
+}
+func tagEq(t testing.TB, a, b map[string][]string) {
+	if !maps.EqualFunc(a, b, slices.Equal) {
+		t.Helper()
+		t.Fatalf("%q != %q", a, b)
 	}
 }
 

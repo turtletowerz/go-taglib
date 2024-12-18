@@ -30,7 +30,7 @@ var ErrSavingFile = fmt.Errorf("can't save file")
 
 // These constants define normalized tag keys used by TagLib's [property mapping].
 // When using [ReadTags], the library will map format-specific metadata to these standardized keys.
-// Similarly, [WriteTags] will map these keys back to the appropriate format-specific fields.
+// Similarly, [WriteTags] and [ReplaceTags] will map these keys back to the appropriate format-specific fields.
 //
 // While these constants provide a consistent interface across different audio formats,
 // you can also use custom tag keys if the underlying format supports arbitrary tags.
@@ -221,8 +221,17 @@ func ReadProperties(path string) (Properties, error) {
 	}, nil
 }
 
-// WriteTags writes metadata tags to an audio file at the given path.
+// WriteTags writes the metadata key-values pairs to path, leaving other found keys untouched.
 func WriteTags(path string, tags map[string][]string) error {
+	return writeTagsOpt(path, tags, false)
+}
+
+// ReplaceTags replaces all tag metadata at path with the the metadata in thhe map.
+func ReplaceTags(path string, tags map[string][]string) error {
+	return writeTagsOpt(path, tags, true)
+}
+
+func writeTagsOpt(path string, tags map[string][]string, replace bool) error {
 	var err error
 	path, err = filepath.Abs(path)
 	if err != nil {
@@ -238,13 +247,17 @@ func WriteTags(path string, tags map[string][]string) error {
 
 	var raw []string
 	for k, vs := range tags {
+		if len(vs) == 0 {
+			raw = append(raw, k+"\t") // allow clearing
+			continue
+		}
 		for _, v := range vs {
 			raw = append(raw, k+"\t"+v)
 		}
 	}
 
 	var out bool
-	if err := mod.call("taglib_file_write_tags", &out, wasmPath(path), raw); err != nil {
+	if err := mod.call("taglib_file_write_tags", &out, wasmPath(path), raw, replace); err != nil {
 		return fmt.Errorf("call: %w", err)
 	}
 	if !out {
@@ -353,6 +366,12 @@ func (m *module) call(name string, dest any, args ...any) error {
 	params := make([]uint64, 0, len(args))
 	for _, a := range args {
 		switch a := a.(type) {
+		case bool:
+			if a {
+				params = append(params, 1)
+			} else {
+				params = append(params, 0)
+			}
 		case int:
 			params = append(params, uint64(a))
 		case uint32:

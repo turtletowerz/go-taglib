@@ -9,6 +9,7 @@ char *to_char_array(const TagLib::String &s) {
   const std::string str = s.to8Bit(true);
   return ::strdup(str.c_str());
 }
+
 TagLib::String to_string(const char *s) {
   return TagLib::String(s, TagLib::String::UTF8);
 }
@@ -37,7 +38,7 @@ taglib_file_tags(const char *filename) {
   for (const auto &kvs : properties)
     for (const auto &v : kvs.second) {
       TagLib::String row = kvs.first + "\t" + v;
-      tags[i] = stringToCharArray(row);
+      tags[i] = to_char_array(row);
       i++;
     }
   tags[len] = nullptr;
@@ -46,7 +47,7 @@ taglib_file_tags(const char *filename) {
 }
 
 __attribute__((export_name("taglib_file_write_tags"))) bool
-taglib_file_write_tags(const char *filename, const char **tags) {
+taglib_file_write_tags(const char *filename, const char **tags, bool replace) {
   if (!filename || !tags)
     return false;
 
@@ -55,18 +56,31 @@ taglib_file_write_tags(const char *filename, const char **tags) {
     return false;
 
   TagLib::PropertyMap properties;
-  for (size_t i = 0; tags[i] != NULL; i++) {
-    TagLib::String row = to_string(tags[i]);
-    if (auto ti = row.find("\t"); ti >= 0) {
+  for (size_t i = 0; tags[i] != nullptr; i++) {
+    TagLib::String row(tags[i], TagLib::String::UTF8);
+    if (auto ti = row.find("\t"); ti != -1) {
       TagLib::String key(row.substr(0, ti));
-      TagLib::StringList value(row.substr(ti + 1));
-      properties.insert(key, value);
+      if (auto v = row.substr(ti + 1); !v.isEmpty()) {
+        properties.insert(key, TagLib::StringList(v));
+      } else {
+        properties.insert(key, TagLib::StringList());
+      }
     }
   }
 
-  if (auto rejected = file.setProperties(properties); rejected.size() > 0)
-    return 0;
+  if (replace) {
+    if (auto rejected = file.setProperties(properties); !rejected.isEmpty())
+      return 0;
+    return file.save();
+  }
 
+  auto existing = file.properties();
+  existing.erase(properties); // wipe the keys we're sending
+  existing.merge(properties); // merge them in
+  existing.removeEmpty();
+
+  if (auto rejected = file.setProperties(existing); !rejected.isEmpty())
+    return 0;
   return file.save();
 }
 
