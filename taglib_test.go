@@ -32,14 +32,15 @@ func TestClear(t *testing.T) {
 	for _, path := range paths {
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			// set some tags first
-			err := taglib.ReplaceTags(path, map[string][]string{
+			err := taglib.WriteTags(path, map[string][]string{
 				"ARTIST":     {"Example A"},
 				"ALUMARTIST": {"Example"},
-			})
+			}, taglib.Clear)
+
 			nilErr(t, err)
 
 			// then clear
-			err = taglib.ReplaceTags(path, nil)
+			err = taglib.WriteTags(path, nil, taglib.Clear)
 			nilErr(t, err)
 
 			got, err := taglib.ReadTags(path)
@@ -94,7 +95,7 @@ func TestReadWrite(t *testing.T) {
 	for _, path := range paths {
 		for i, tags := range testTags {
 			t.Run(fmt.Sprintf("%s_tags_%d", filepath.Base(path), i), func(t *testing.T) {
-				err := taglib.ReplaceTags(path, tags)
+				err := taglib.WriteTags(path, tags, taglib.Clear)
 				nilErr(t, err)
 
 				got, err := taglib.ReadTags(path)
@@ -120,12 +121,13 @@ func TestMergeWrite(t *testing.T) {
 
 	for _, path := range paths {
 		t.Run(filepath.Base(path), func(t *testing.T) {
-			err := taglib.ReplaceTags(path, nil) // clear
+			err := taglib.WriteTags(path, nil, taglib.Clear)
 			nilErr(t, err)
 
 			err = taglib.WriteTags(path, map[string][]string{
 				"ONE": {"one"},
-			})
+			}, 0)
+
 			nilErr(t, err)
 			cmp(t, path, map[string][]string{
 				"ONE": {"one"},
@@ -134,7 +136,8 @@ func TestMergeWrite(t *testing.T) {
 			nilErr(t, err)
 			err = taglib.WriteTags(path, map[string][]string{
 				"TWO": {"two", "two!"},
-			})
+			}, 0)
+
 			nilErr(t, err)
 			cmp(t, path, map[string][]string{
 				"ONE": {"one"},
@@ -143,7 +146,8 @@ func TestMergeWrite(t *testing.T) {
 
 			err = taglib.WriteTags(path, map[string][]string{
 				"THREE": {"three"},
-			})
+			}, 0)
+
 			nilErr(t, err)
 			cmp(t, path, map[string][]string{
 				"ONE":   {"one"},
@@ -154,7 +158,8 @@ func TestMergeWrite(t *testing.T) {
 			// change prev
 			err = taglib.WriteTags(path, map[string][]string{
 				"ONE": {"one new"},
-			})
+			}, 0)
+
 			nilErr(t, err)
 			cmp(t, path, map[string][]string{
 				"ONE":   {"one new"},
@@ -166,7 +171,8 @@ func TestMergeWrite(t *testing.T) {
 			err = taglib.WriteTags(path, map[string][]string{
 				"ONE":   {},
 				"THREE": {"three new!"},
-			})
+			}, 0)
+
 			nilErr(t, err)
 			cmp(t, path, map[string][]string{
 				"TWO":   {"two", "two!"},
@@ -276,14 +282,14 @@ func BenchmarkWrite(b *testing.B) {
 	b.ResetTimer()
 
 	for range b.N {
-		err := taglib.ReplaceTags(path, bigTags)
+		err := taglib.WriteTags(path, bigTags, taglib.Clear)
 		nilErr(b, err)
 	}
 }
 
 func BenchmarkRead(b *testing.B) {
 	path := tmpf(b, egFLAC, "eg.flac")
-	err := taglib.ReplaceTags(path, bigTags)
+	err := taglib.WriteTags(path, bigTags, taglib.Clear)
 	nilErr(b, err)
 	b.ResetTimer()
 

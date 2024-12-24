@@ -46,8 +46,11 @@ taglib_file_tags(const char *filename) {
   return tags;
 }
 
+static const uint8_t CLEAR = 1 << 0;
+static const uint8_t DIFF_SAVE = 1 << 1;
+
 __attribute__((export_name("taglib_file_write_tags"))) bool
-taglib_file_write_tags(const char *filename, const char **tags, bool replace) {
+taglib_file_write_tags(const char *filename, const char **tags, uint8_t opts) {
   if (!filename || !tags)
     return false;
 
@@ -55,32 +58,28 @@ taglib_file_write_tags(const char *filename, const char **tags, bool replace) {
   if (file.isNull())
     return false;
 
-  TagLib::PropertyMap properties;
-  for (size_t i = 0; tags[i] != nullptr; i++) {
+  auto properties = file.properties();
+  if (opts & CLEAR)
+    properties.clear();
+
+  for (size_t i = 0; tags[i]; i++) {
     TagLib::String row(tags[i], TagLib::String::UTF8);
     if (auto ti = row.find("\t"); ti != -1) {
-      TagLib::String key(row.substr(0, ti));
-      if (auto v = row.substr(ti + 1); !v.isEmpty()) {
-        properties.insert(key, TagLib::StringList(v));
-      } else {
-        properties.insert(key, TagLib::StringList());
-      }
+      auto key = row.substr(0, ti);
+      auto value = row.substr(ti + 1);
+      if (value.isEmpty())
+        properties.erase(key);
+      else
+        properties.replace(key, value.split("\v"));
     }
   }
 
-  if (replace) {
-    if (auto rejected = file.setProperties(properties); !rejected.isEmpty())
-      return 0;
-    return file.save();
+  if (opts & DIFF_SAVE) {
+    if (file.properties() == properties)
+      return true;
   }
 
-  auto existing = file.properties();
-  existing.erase(properties); // wipe the keys we're sending
-  existing.merge(properties); // merge them in
-  existing.removeEmpty();
-
-  if (auto rejected = file.setProperties(existing); !rejected.isEmpty())
-    return 0;
+  file.setProperties(properties);
   return file.save();
 }
 

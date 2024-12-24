@@ -221,17 +221,20 @@ func ReadProperties(path string) (Properties, error) {
 	}, nil
 }
 
-// WriteTags writes the metadata key-values pairs to path, leaving other found keys untouched.
-func WriteTags(path string, tags map[string][]string) error {
-	return writeTagsOpt(path, tags, false)
-}
+// WriteOption configures the behavior of write operations. The can be passed to [WriteTags] and combined with the bitwise OR operator.
+type WriteOption uint8
 
-// ReplaceTags replaces all tag metadata at path with the the metadata in thhe map.
-func ReplaceTags(path string, tags map[string][]string) error {
-	return writeTagsOpt(path, tags, true)
-}
+const (
+	// Clear indicates that all existing tags not present in the map should be removed.
+	Clear WriteOption = 1 << iota
 
-func writeTagsOpt(path string, tags map[string][]string, replace bool) error {
+	// DiffBeforeWrite enables comparison before writing to disk.
+	// When set, no write occurs if the map contains no changes compared to the existing tags.
+	DiffBeforeWrite
+)
+
+// WriteTags writes the metadata key-values pairs to path. The behavior can be controlled with [WriteOption].
+func WriteTags(path string, tags map[string][]string, opts WriteOption) error {
 	var err error
 	path, err = filepath.Abs(path)
 	if err != nil {
@@ -247,17 +250,11 @@ func writeTagsOpt(path string, tags map[string][]string, replace bool) error {
 
 	var raw []string
 	for k, vs := range tags {
-		if len(vs) == 0 {
-			raw = append(raw, k+"\t") // allow clearing
-			continue
-		}
-		for _, v := range vs {
-			raw = append(raw, k+"\t"+v)
-		}
+		raw = append(raw, fmt.Sprintf("%s\t%s", k, strings.Join(vs, "\v")))
 	}
 
 	var out bool
-	if err := mod.call("taglib_file_write_tags", &out, wasmPath(path), raw, replace); err != nil {
+	if err := mod.call("taglib_file_write_tags", &out, wasmPath(path), raw, opts); err != nil {
 		return fmt.Errorf("call: %w", err)
 	}
 	if !out {
@@ -373,6 +370,10 @@ func (m *module) call(name string, dest any, args ...any) error {
 				params = append(params, 0)
 			}
 		case int:
+			params = append(params, uint64(a))
+		case uint8:
+			params = append(params, uint64(a))
+		case WriteOption:
 			params = append(params, uint64(a))
 		case uint32:
 			params = append(params, uint64(a))
