@@ -254,7 +254,7 @@ func WriteTags(path string, tags map[string][]string, opts WriteOption) error {
 	}
 
 	var out bool
-	if err := mod.call("taglib_file_write_tags", &out, wasmPath(path), raw, opts); err != nil {
+	if err := mod.call("taglib_file_write_tags", &out, wasmPath(path), raw, uint8(opts)); err != nil {
 		return fmt.Errorf("call: %w", err)
 	}
 	if !out {
@@ -372,8 +372,6 @@ func (m *module) call(name string, dest any, args ...any) error {
 		case int:
 			params = append(params, uint64(a))
 		case uint8:
-			params = append(params, uint64(a))
-		case WriteOption:
 			params = append(params, uint64(a))
 		case uint32:
 			params = append(params, uint64(a))
