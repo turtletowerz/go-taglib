@@ -225,7 +225,7 @@ func ReadProperties(path string) (Properties, error) {
 type WriteOption uint8
 
 const (
-	// Clear indicates that all existing tags not present in the map should be removed.
+	// Clear indicates that all existing tags not present in the new map should be removed.
 	Clear WriteOption = 1 << iota
 
 	// DiffBeforeWrite enables comparison before writing to disk.

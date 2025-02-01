@@ -54,7 +54,7 @@ The behaviour of writing can be configured with some bitset flags
 
 The options are
 
-- `Clear` which clears existing metadata before writing the new
+- `Clear` which indicates that all existing tags not present in the new map should be removed
 - `DiffBeforeWrite` which won't modify the file on disk if the new metadata is the same as the old
 
 The options can be combined the with the bitwise `OR` operator (`|`)
