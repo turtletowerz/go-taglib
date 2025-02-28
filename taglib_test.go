@@ -371,6 +371,7 @@ func checkMem(t testing.TB) {
 	}()
 }
 
+// TODO: Change to appropriate taglib.* keys
 var bigTags = map[string][]string{
 	"ALBUM":                      {"New Raceion"},
 	"ALBUMARTIST":                {"Alan Vega"},
