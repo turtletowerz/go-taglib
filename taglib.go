@@ -5,6 +5,10 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"image"
+	_ "image/jpeg"
+	_ "image/png"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -221,6 +225,106 @@ func ReadProperties(path string) (Properties, error) {
 	}, nil
 }
 
+type bytePtrType uint32
+
+// ReadImageRaw reads the first available embedded image bytes from path, returning nil if there are no images in the file
+func ReadImageRaw(path string) (io.Reader, error) {
+	var err error
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("make path abs %w", err)
+	}
+
+	mod, err := newModule(filepath.Dir(path))
+	if err != nil {
+		return nil, fmt.Errorf("init module: %w", err)
+	}
+	defer mod.close()
+
+	var img []byte
+	if err := mod.call("taglib_file_read_image", &img, wasmPath(path), bytePtrType(4)); err != nil {
+		return nil, fmt.Errorf("call: %w", err)
+	}
+
+	return bytes.NewReader(img), nil
+}
+
+// ReadImage reads the first available embedded image from path, returning nil if there are no images in the file
+func ReadImage(path string) (image.Image, error) {
+	r, err := ReadImageRaw(path)
+	if err != nil {
+		return nil, fmt.Errorf("getting image bytes: %w", err)
+	}
+
+	img, _, err := image.Decode(r)
+	if err != nil {
+		return nil, fmt.Errorf("decoding image: %w", err)
+	}
+	return img, nil
+}
+
+// WriteImage writes the image at img to path
+func WriteImage(path, img string) error {
+	img, err := filepath.Abs(img)
+	if err != nil {
+		return fmt.Errorf("make image path abs %w", err)
+	}
+
+	imgData, err := os.ReadFile(img)
+	if err != nil {
+		return fmt.Errorf("reading image file: %w", err)
+	}
+
+	return WriteImageRaw(path, imgData)
+}
+
+func WriteImageRaw(path string, image []byte) error {
+	var err error
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("make path abs %w", err)
+	}
+
+	mod, err := newModule(filepath.Dir(path))
+	if err != nil {
+		return fmt.Errorf("init module: %w", err)
+	}
+	defer mod.close()
+
+	var out bool
+	if err := mod.call("taglib_file_write_image", &out, wasmPath(path), image, len(image)); err != nil {
+		return fmt.Errorf("call: %w", err)
+	}
+	if !out {
+		return ErrSavingFile
+	}
+	return nil
+}
+
+// ClearImages removes all images from the file at path
+func ClearImages(path string) error {
+	var err error
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("make path abs %w", err)
+	}
+
+	mod, err := newModule(filepath.Dir(path))
+	if err != nil {
+		return fmt.Errorf("init module: %w", err)
+	}
+	defer mod.close()
+
+	var out bool
+	if err := mod.call("taglib_file_clear_images", &out, wasmPath(path)); err != nil {
+		return fmt.Errorf("call: %w", err)
+	}
+	if !out {
+		return ErrSavingFile
+	}
+	return nil
+}
+
 // WriteOption configures the behavior of write operations. The can be passed to [WriteTags] and combined with the bitwise OR operator.
 type WriteOption uint8
 
@@ -361,6 +465,7 @@ func (m *module) malloc(size uint32) uint32 {
 
 func (m *module) call(name string, dest any, args ...any) error {
 	params := make([]uint64, 0, len(args))
+	var bytePtr uint32
 	for _, a := range args {
 		switch a := a.(type) {
 		case bool:
@@ -373,10 +478,18 @@ func (m *module) call(name string, dest any, args ...any) error {
 			params = append(params, uint64(a))
 		case uint8:
 			params = append(params, uint64(a))
+		case bytePtrType:
+			bytePtr = m.malloc(uint32(a))
+			if !m.mod.Memory().WriteUint32Le(bytePtr, 0) {
+				return fmt.Errorf("failed to zero memory for byte array")
+			}
+			params = append(params, uint64(bytePtr))
 		case uint32:
 			params = append(params, uint64(a))
 		case uint64:
 			params = append(params, a)
+		case []byte:
+			params = append(params, uint64(makeByteArray(m, a)))
 		case string:
 			params = append(params, uint64(makeString(m, a)))
 		case []string:
@@ -416,6 +529,10 @@ func (m *module) call(name string, dest any, args ...any) error {
 		if result != 0 {
 			*dest = readInts(m, uint32(result), cap(*dest))
 		}
+	case *[]byte:
+		if result != 0 {
+			*dest = readBytes(m, uint32(result), bytePtr)
+		}
 	default:
 		panic(fmt.Sprintf("unknown result type %T", dest))
 	}
@@ -426,6 +543,14 @@ func (m *module) close() {
 	if err := m.mod.Close(context.Background()); err != nil {
 		panic(err)
 	}
+}
+
+func makeByteArray(m *module, b []byte) uint32 {
+	ptr := m.malloc(uint32(len(b)))
+	if !m.mod.Memory().Write(ptr, b) {
+		panic("failed to write to mod.module.Memory()")
+	}
+	return ptr
 }
 
 func makeString(m *module, s string) uint32 {
@@ -475,6 +600,22 @@ func readString(m *module, ptr uint32) string {
 		buf = append(buf, next...)
 		size += size
 	}
+}
+
+func readBytes(m *module, ptr, sizePtr uint32) []byte {
+	size, ok := m.mod.Memory().ReadUint32Le(sizePtr)
+	if !ok {
+		panic("memory error")
+	}
+	b, ok := m.mod.Memory().Read(ptr, size)
+	if !ok {
+		panic("memory error")
+	}
+
+	// Copy the data. "This returns a view of the underlying memory, not a copy." per api.Memory.Read docs
+	ret := make([]byte, size)
+	copy(ret, b)
+	return ret
 }
 
 func readStrings(m *module, ptr uint32) []string {

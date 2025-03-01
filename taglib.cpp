@@ -101,3 +101,68 @@ taglib_file_audioproperties(const char *filename) {
 
   return arr;
 }
+
+__attribute__((export_name("taglib_file_read_image"))) char *
+taglib_file_read_image(const char *filename, unsigned int *length) {
+  TagLib::FileRef file(filename);
+  if (file.isNull() || !file.audioProperties())
+    return nullptr;
+
+  const auto& pictures = file.complexProperties("PICTURE");
+  if (pictures.isEmpty())
+    return nullptr;
+    
+
+  for (const auto &p: pictures) {
+    const auto pictureType = p["pictureType"].toString();
+    if (pictureType == "Front Cover") {
+      auto v = p["data"].toByteVector();
+      if (!v.isEmpty()) {
+        *length = v.size();
+        return v.data();
+      }
+    }
+  }
+
+  // If we couldn't find a front cover pick a random cover
+  auto v = pictures.front()["data"].toByteVector();
+  *length = v.size();
+  return v.data();
+}
+
+// TODO: Maybe allow user to set cover type?
+__attribute__((export_name("taglib_file_write_image"))) bool
+taglib_file_write_image(const char *filename, const char *buf, unsigned int length) {
+  TagLib::FileRef file(filename);
+  if (file.isNull() || !file.audioProperties())
+    return false;
+
+  // https://github.com/taglib/taglib/blob/v2.0.2/examples/tagwriter.cpp#L187-L189
+  TagLib::ByteVector data(buf, length);
+  TagLib::String mimeType = data.startsWith("\x89PNG\x0d\x0a\x1a\x0a") ? "image/png" : "image/jpeg";
+
+  file.setComplexProperties("PICTURE", {
+    {
+      {"data", data},
+      {"pictureType", "Front Cover"},
+      {"mimeType", mimeType},
+      {"description", "Added by go-taglib"}
+    }
+  });
+
+  return file.save();
+}
+
+__attribute__((export_name("taglib_file_clear_images"))) bool
+taglib_file_clear_images(const char *filename) {
+  TagLib::FileRef file(filename);
+  if (file.isNull() || !file.audioProperties())
+    return false;
+
+  // This is how TagLib does it
+  // https://github.com/taglib/taglib/blob/v2.0.2/examples/tagwriter.cpp#L202
+  if (!file.setComplexProperties("PICTURE", {}))
+    return false;
+  
+  return file.save();
+}

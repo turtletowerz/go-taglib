@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"image"
 	"maps"
 	"os"
 	"path/filepath"
@@ -242,6 +243,109 @@ func TestMultiOpen(t *testing.T) {
 	}
 }
 
+func TestReadImageRaw(t *testing.T) {
+	path := tmpf(t, egFLAC, "eg.flac")
+	data, err := taglib.ReadImageRaw(path)
+	nilErr(t, err)
+	if data == nil {
+		t.Helper()
+		t.Fatalf("no image data")
+	}
+
+	img, _, err := image.DecodeConfig(data)
+	nilErr(t, err)
+
+	if img.Width != 700 || img.Height != 700 {
+		t.Fatalf("bad image dimensions: %d, %d != 700, 700", img.Width, img.Height)
+	}
+
+	nilErr(t, os.Remove(path)) // don't blow up incase we're using tmpfs
+}
+
+func TestReadImage(t *testing.T) {
+	path := tmpf(t, egFLAC, "eg.flac")
+	img, err := taglib.ReadImage(path)
+	nilErr(t, err)
+	if img == nil {
+		t.Helper()
+		t.Fatalf("no image")
+	}
+
+	b := img.Bounds()
+	if b.Dx() != 700 || b.Dy() != 700 {
+		t.Fatalf("bad image dimensions: %d, %d != 700, 700", b.Dx(), b.Dy())
+	}
+
+	nilErr(t, os.Remove(path)) // don't blow up incase we're using tmpfs
+}
+
+func TestWriteImageRaw(t *testing.T) {
+	path := tmpf(t, egFLAC, "eg.flac")
+
+	err := taglib.ClearImages(path)
+	nilErr(t, err)
+
+	err = taglib.WriteImageRaw(path, coverJPG)
+	nilErr(t, err)
+
+	img, err := taglib.ReadImage(path)
+	nilErr(t, err)
+	if img == nil {
+		t.Helper()
+		t.Fatalf("no written image")
+	}
+
+	b := img.Bounds()
+	if b.Dx() != 700 || b.Dy() != 700 {
+		t.Fatalf("bad image dimensions: %d, %d != 700, 700", b.Dx(), b.Dy())
+	}
+	//nilErr(t, os.Remove(path)) // don't blow up incase we're using tmpfs
+}
+
+func TestWriteImage(t *testing.T) {
+	path := tmpf(t, egFLAC, "eg.flac")
+	coverpath := tmpf(t, coverJPG, "cover.jpg")
+
+	err := taglib.ClearImages(path)
+	nilErr(t, err)
+
+	err = taglib.WriteImage(path, coverpath)
+	nilErr(t, err)
+
+	img, err := taglib.ReadImage(path)
+	nilErr(t, err)
+	if img == nil {
+		t.Helper()
+		t.Fatalf("no written image")
+	}
+
+	b := img.Bounds()
+	if b.Dx() != 700 || b.Dy() != 700 {
+		t.Fatalf("bad image dimensions: %d, %d != 700, 700", b.Dx(), b.Dy())
+	}
+	nilErr(t, os.Remove(path)) // don't blow up incase we're using tmpfs
+	nilErr(t, os.Remove(coverpath))
+}
+
+func TestClearImage(t *testing.T) {
+	path := tmpf(t, egFLAC, "eg.flac")
+
+	nilErr(t, taglib.ClearImages(path))
+
+	img, err := taglib.ReadImage(path)
+	if err == nil {
+		t.Helper()
+		t.Fatalf("expected error, got nil")
+	}
+
+	if img != nil {
+		t.Helper()
+		t.Fatalf("expected no image, found one")
+	}
+
+	nilErr(t, os.Remove(path)) // don't blow up incase we're using tmpfs
+}
+
 func TestMemNew(t *testing.T) {
 	t.Parallel()
 
@@ -310,6 +414,8 @@ var (
 	egOgg []byte
 	//go:embed testdata/eg.wav
 	egWAV []byte
+	//go:embed testdata/cover.jpg
+	coverJPG []byte
 )
 
 func testPaths(t testing.TB) []string {
