@@ -248,7 +248,6 @@ func TestReadImageRaw(t *testing.T) {
 	data, err := taglib.ReadImageRaw(path)
 	nilErr(t, err)
 	if data == nil {
-		t.Helper()
 		t.Fatalf("no image data")
 	}
 
@@ -258,8 +257,6 @@ func TestReadImageRaw(t *testing.T) {
 	if img.Width != 700 || img.Height != 700 {
 		t.Fatalf("bad image dimensions: %d, %d != 700, 700", img.Width, img.Height)
 	}
-
-	nilErr(t, os.Remove(path)) // don't blow up incase we're using tmpfs
 }
 
 func TestReadImage(t *testing.T) {
@@ -267,7 +264,6 @@ func TestReadImage(t *testing.T) {
 	img, err := taglib.ReadImage(path)
 	nilErr(t, err)
 	if img == nil {
-		t.Helper()
 		t.Fatalf("no image")
 	}
 
@@ -275,8 +271,6 @@ func TestReadImage(t *testing.T) {
 	if b.Dx() != 700 || b.Dy() != 700 {
 		t.Fatalf("bad image dimensions: %d, %d != 700, 700", b.Dx(), b.Dy())
 	}
-
-	nilErr(t, os.Remove(path)) // don't blow up incase we're using tmpfs
 }
 
 func TestWriteImageRaw(t *testing.T) {
@@ -291,7 +285,6 @@ func TestWriteImageRaw(t *testing.T) {
 	img, err := taglib.ReadImage(path)
 	nilErr(t, err)
 	if img == nil {
-		t.Helper()
 		t.Fatalf("no written image")
 	}
 
@@ -299,7 +292,6 @@ func TestWriteImageRaw(t *testing.T) {
 	if b.Dx() != 700 || b.Dy() != 700 {
 		t.Fatalf("bad image dimensions: %d, %d != 700, 700", b.Dx(), b.Dy())
 	}
-	//nilErr(t, os.Remove(path)) // don't blow up incase we're using tmpfs
 }
 
 func TestWriteImage(t *testing.T) {
@@ -315,7 +307,6 @@ func TestWriteImage(t *testing.T) {
 	img, err := taglib.ReadImage(path)
 	nilErr(t, err)
 	if img == nil {
-		t.Helper()
 		t.Fatalf("no written image")
 	}
 
@@ -323,8 +314,6 @@ func TestWriteImage(t *testing.T) {
 	if b.Dx() != 700 || b.Dy() != 700 {
 		t.Fatalf("bad image dimensions: %d, %d != 700, 700", b.Dx(), b.Dy())
 	}
-	nilErr(t, os.Remove(path)) // don't blow up incase we're using tmpfs
-	nilErr(t, os.Remove(coverpath))
 }
 
 func TestClearImage(t *testing.T) {
@@ -334,16 +323,12 @@ func TestClearImage(t *testing.T) {
 
 	img, err := taglib.ReadImage(path)
 	if err == nil {
-		t.Helper()
 		t.Fatalf("expected error, got nil")
 	}
 
 	if img != nil {
-		t.Helper()
 		t.Fatalf("expected no image, found one")
 	}
-
-	nilErr(t, os.Remove(path)) // don't blow up incase we're using tmpfs
 }
 
 func TestMemNew(t *testing.T) {

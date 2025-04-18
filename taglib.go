@@ -235,7 +235,7 @@ func ReadImageRaw(path string) (io.Reader, error) {
 		return nil, fmt.Errorf("make path abs %w", err)
 	}
 
-	mod, err := newModule(filepath.Dir(path))
+	mod, err := newModuleRO(filepath.Dir(path))
 	if err != nil {
 		return nil, fmt.Errorf("init module: %w", err)
 	}
