@@ -225,7 +225,9 @@ func ReadProperties(path string) (Properties, error) {
 	}, nil
 }
 
-type bytePtrType uint32
+// Special type included to record the length of a byte array returned by WASM
+// This needs to be a unique type, otherwise a passed uint32 is ambiguous about whether it is for a byte array or just a regular integer
+type byteArrayLength uint32
 
 // ReadImageRaw reads the first available embedded image bytes from path, returning nil if there are no images in the file
 func ReadImageRaw(path string) (io.Reader, error) {
@@ -242,7 +244,7 @@ func ReadImageRaw(path string) (io.Reader, error) {
 	defer mod.close()
 
 	var img []byte
-	if err := mod.call("taglib_file_read_image", &img, wasmPath(path), bytePtrType(4)); err != nil {
+	if err := mod.call("taglib_file_read_image", &img, wasmPath(path), byteArrayLength(4)); err != nil {
 		return nil, fmt.Errorf("call: %w", err)
 	}
 
@@ -465,7 +467,7 @@ func (m *module) malloc(size uint32) uint32 {
 
 func (m *module) call(name string, dest any, args ...any) error {
 	params := make([]uint64, 0, len(args))
-	var bytePtr uint32
+	var arrayLength uint32
 	for _, a := range args {
 		switch a := a.(type) {
 		case bool:
@@ -478,12 +480,12 @@ func (m *module) call(name string, dest any, args ...any) error {
 			params = append(params, uint64(a))
 		case uint8:
 			params = append(params, uint64(a))
-		case bytePtrType:
-			bytePtr = m.malloc(uint32(a))
-			if !m.mod.Memory().WriteUint32Le(bytePtr, 0) {
+		case byteArrayLength:
+			arrayLength = m.malloc(uint32(a))
+			if !m.mod.Memory().WriteUint32Le(arrayLength, 0) {
 				return fmt.Errorf("failed to zero memory for byte array")
 			}
-			params = append(params, uint64(bytePtr))
+			params = append(params, uint64(arrayLength))
 		case uint32:
 			params = append(params, uint64(a))
 		case uint64:
@@ -531,7 +533,7 @@ func (m *module) call(name string, dest any, args ...any) error {
 		}
 	case *[]byte:
 		if result != 0 {
-			*dest = readBytes(m, uint32(result), bytePtr)
+			*dest = readBytes(m, uint32(result), arrayLength)
 		}
 	default:
 		panic(fmt.Sprintf("unknown result type %T", dest))
