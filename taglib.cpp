@@ -5,6 +5,12 @@
 #include "fileref.h"
 #include "tpropertymap.h"
 
+// Size must come first so that we know how much of data to read
+struct picture {
+  unsigned int length;
+  char *data;
+};
+
 char *to_char_array(const TagLib::String &s) {
   const std::string str = s.to8Bit(true);
   return ::strdup(str.c_str());
@@ -102,8 +108,8 @@ taglib_file_audioproperties(const char *filename) {
   return arr;
 }
 
-__attribute__((export_name("taglib_file_read_image"))) char *
-taglib_file_read_image(const char *filename, unsigned int *length) {
+__attribute__((export_name("taglib_file_read_image"))) picture *
+taglib_file_read_image(const char *filename) {
   TagLib::FileRef file(filename);
   if (file.isNull() || !file.audioProperties())
     return nullptr;
@@ -111,23 +117,25 @@ taglib_file_read_image(const char *filename, unsigned int *length) {
   const auto& pictures = file.complexProperties("PICTURE");
   if (pictures.isEmpty())
     return nullptr;
-    
 
+  picture *pic = (picture *)malloc(sizeof(picture));
   for (const auto &p: pictures) {
     const auto pictureType = p["pictureType"].toString();
     if (pictureType == "Front Cover") {
       auto v = p["data"].toByteVector();
       if (!v.isEmpty()) {
-        *length = v.size();
-        return v.data();
+        pic->length = unsigned(v.size());
+        pic->data = v.data();
+        return pic;
       }
     }
   }
 
   // If we couldn't find a front cover pick a random cover
   auto v = pictures.front()["data"].toByteVector();
-  *length = v.size();
-  return v.data();
+  pic->length = unsigned(v.size());
+  pic->data = v.data();
+  return pic;
 }
 
 // TODO: Maybe allow user to set cover type?

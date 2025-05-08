@@ -227,7 +227,7 @@ func ReadProperties(path string) (Properties, error) {
 
 // Special type included to record the length of a byte array returned by WASM
 // This needs to be a unique type, otherwise a passed uint32 is ambiguous about whether it is for a byte array or just a regular integer
-type byteArrayLength uint32
+type picture []byte
 
 // ReadImageRaw reads the first available embedded image bytes from path, returning nil if there are no images in the file
 func ReadImageRaw(path string) (io.Reader, error) {
@@ -243,9 +243,13 @@ func ReadImageRaw(path string) (io.Reader, error) {
 	}
 	defer mod.close()
 
-	var img []byte
-	if err := mod.call("taglib_file_read_image", &img, wasmPath(path), byteArrayLength(4)); err != nil {
+	var img picture
+	if err := mod.call("taglib_file_read_image", &img, wasmPath(path)); err != nil {
 		return nil, fmt.Errorf("call: %w", err)
+	}
+
+	if img == nil {
+		return nil, fmt.Errorf("could not get cover image")
 	}
 
 	return bytes.NewReader(img), nil
@@ -467,7 +471,6 @@ func (m *module) malloc(size uint32) uint32 {
 
 func (m *module) call(name string, dest any, args ...any) error {
 	params := make([]uint64, 0, len(args))
-	var arrayLength uint32
 	for _, a := range args {
 		switch a := a.(type) {
 		case bool:
@@ -480,12 +483,6 @@ func (m *module) call(name string, dest any, args ...any) error {
 			params = append(params, uint64(a))
 		case uint8:
 			params = append(params, uint64(a))
-		case byteArrayLength:
-			arrayLength = m.malloc(uint32(a))
-			if !m.mod.Memory().WriteUint32Le(arrayLength, 0) {
-				return fmt.Errorf("failed to zero memory for byte array")
-			}
-			params = append(params, uint64(arrayLength))
 		case uint32:
 			params = append(params, uint64(a))
 		case uint64:
@@ -531,9 +528,9 @@ func (m *module) call(name string, dest any, args ...any) error {
 		if result != 0 {
 			*dest = readInts(m, uint32(result), cap(*dest))
 		}
-	case *[]byte:
+	case *picture:
 		if result != 0 {
-			*dest = readBytes(m, uint32(result), arrayLength)
+			*dest = readPicture(m, uint32(result))
 		}
 	default:
 		panic(fmt.Sprintf("unknown result type %T", dest))
@@ -604,18 +601,25 @@ func readString(m *module, ptr uint32) string {
 	}
 }
 
-func readBytes(m *module, ptr, sizePtr uint32) []byte {
-	size, ok := m.mod.Memory().ReadUint32Le(sizePtr)
+func readPicture(m *module, ptr uint32) picture {
+	size, ok := m.mod.Memory().ReadUint32Le(ptr)
 	if !ok {
 		panic("memory error")
 	}
-	b, ok := m.mod.Memory().Read(ptr, size)
+
+	if size == 0 {
+		return nil
+	}
+
+	// Read the ptr to the struct to get the location of the image data
+	loc, _ := m.mod.Memory().ReadUint32Le(ptr + 4)
+	b, ok := m.mod.Memory().Read(loc, size)
 	if !ok {
 		panic("memory error")
 	}
 
 	// Copy the data. "This returns a view of the underlying memory, not a copy." per api.Memory.Read docs
-	ret := make([]byte, size)
+	ret := make(picture, size)
 	copy(ret, b)
 	return ret
 }
